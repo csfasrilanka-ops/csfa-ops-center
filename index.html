@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CSFA | Mission Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body { background-color: #020617; font-family: system-ui, sans-serif; color: #f8fafc; -webkit-tap-highlight-color: transparent; }
+        .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 1.5rem; padding: 1.25rem; transition: all 0.3s; }
+        .card:hover { border-color: #3b82f6; }
+        .input { background: #020617 !important; border: 1px solid #334155 !important; padding: 0.75rem; border-radius: 0.75rem; color: white !important; width: 100%; outline: none; font-size: 16px; }
+        .btn-primary { background: #2563eb; color: white; padding: 0.75rem; border-radius: 0.75rem; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 0.1em; border: none; }
+        .btn-save { background: #10b981; color: white; padding: 0.6rem 1.2rem; border-radius: 0.75rem; font-size: 12px; font-weight: 900; text-transform: uppercase; }
+        .btn-delete { color: #ef4444; font-weight: bold; padding: 0.5rem; font-size: 20px; }
+        .tab-active { border-bottom: 3px solid #3b82f6; color: #3b82f6; }
+        ::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; cursor: pointer; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body class="p-4 md:p-10">
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-zone" class="fixed inset-0 z-50 flex items-center justify-center bg-[#020617] px-4">
+        <div class="card w-full max-w-sm text-center shadow-2xl border-blue-900/20">
+            <h1 class="text-2xl font-black italic uppercase mb-8 tracking-tighter text-white">Pilot <span class="text-blue-500">Access</span></h1>
+            <div class="space-y-4">
+                <input type="email" id="email" placeholder="Pilot Email" class="input">
+                <input type="password" id="password" placeholder="Password" class="input">
+                <button id="login-btn" onclick="signIn()" class="btn-primary w-full mt-2">Log In to Ops</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN DASHBOARD -->
+    <div id="dashboard" class="hidden max-w-6xl mx-auto pb-20">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b border-white/5 pb-6">
+            <div class="text-center md:text-left">
+                <h1 class="text-2xl font-black uppercase italic tracking-tighter text-white leading-none">CSFA <span class="text-blue-600">COMMAND</span></h1>
+                <p id="user-display" class="text-[9px] text-slate-500 uppercase font-bold tracking-[0.2em] mt-2"></p>
+            </div>
+            <button onclick="signOut()" class="text-[10px] font-black text-slate-400 uppercase border border-slate-800 px-5 py-2 rounded-full hover:text-red-500 transition-all">Sign Out</button>
+        </header>
+
+        <nav class="flex gap-8 text-[11px] font-black uppercase tracking-widest mb-10 overflow-x-auto border-b border-white/5">
+            <button onclick="switchTab('sessions')" id="t-sessions" class="pb-4 tab-active whitespace-nowrap">Flight Sessions</button>
+            <button onclick="switchTab('locations')" id="t-locations" class="pb-4 whitespace-nowrap">Flying Sites</button>
+            <button onclick="switchTab('addons')" id="t-addons" class="pb-4 whitespace-nowrap">Add-ons</button>
+            <button onclick="switchTab('price')" id="t-price" class="pb-4 whitespace-nowrap">Base Fee</button>
+        </nav>
+
+        <div id="content-area"></div>
+    </div>
+
+    <script>
+        const SB_URL = "https://rbvbkibhxmmnpzntbzvt.supabase.co";
+        const SB_KEY = "sb_publishable_KHW9RkQqLeB1YMSrSSHowg_tOe_KjdT"; 
+        const client = window.supabase.createClient(SB_URL, SB_KEY);
+
+        let appData = { sessions: [], locations: [], addons: [], config: [] };
+
+        window.signIn = async function() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const { error } = await client.auth.signInWithPassword({ email, password });
+            if (error) alert(error.message); else checkAuth();
+        };
+
+        window.signOut = async function() { await client.auth.signOut(); location.reload(); };
+
+        async function checkAuth() {
+            const { data: { session } } = await client.auth.getSession();
+            if (session) {
+                document.getElementById('login-zone').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                document.getElementById('user-display').innerText = `Pilot: ${session.user.email}`;
+                loadData();
+            }
+        }
+
+        async function loadData() {
+            const [s, l, a, c] = await Promise.all([
+                client.from('booking_sessions').select('*').order('id', { ascending: false }),
+                client.from('booking_locations').select('*').order('id', { ascending: true }),
+                client.from('booking_addons').select('*').order('id', { ascending: true }),
+                client.from('booking_config').select('*')
+            ]);
+            appData = { sessions: s.data, locations: l.data, addons: a.data, config: c.data };
+            switchTab('sessions');
+        }
+
+        window.switchTab = function(tab) {
+            const area = document.getElementById('content-area');
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('tab-active', 'text-blue-500'));
+            document.getElementById('t-'+tab).classList.add('tab-active', 'text-blue-500');
+
+            if(tab === 'sessions') {
+                area.innerHTML = `
+                    <div class="card border-blue-500/30 mb-10">
+                        <h3 class="text-blue-500 font-black uppercase text-xs mb-6 italic tracking-widest">Plan Flight Session</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                            <div><label class="text-[9px] font-bold text-slate-500 uppercase block mb-1">Date</label><input type="date" id="new-date" class="input"></div>
+                            <div><label class="text-[9px] font-bold text-slate-500 uppercase block mb-1">Launch Time</label><input type="time" id="new-time" class="input" value="08:30"></div>
+                            <div><label class="text-[9px] font-bold text-slate-500 uppercase block mb-1">Location</label><select id="new-loc" class="input">${appData.locations.map(l => `<option value="${l.id}">${l.name}</option>`).join('')}</select></div>
+                            <div><label class="text-[9px] font-bold text-slate-500 uppercase block mb-1">Seats</label><input type="number" id="new-slots" class="input" value="5"></div>
+                            <button onclick="createNewSession()" class="btn-primary">Add Session</button>
+                        </div>
+                    </div>
+                    <div class="grid gap-3">
+                        ${appData.sessions.map(s => `
+                            <div class="card flex flex-col lg:flex-row gap-4 items-end">
+                                <div class="flex-1 w-full"><label class="text-[9px] font-black text-slate-600 uppercase mb-1 block">Scheduled Date</label><input id="sess-date-${s.id}" class="input font-bold" value="${s.date_text}"></div>
+                                <div class="w-full lg:w-32"><label class="text-[9px] font-black text-slate-600 uppercase mb-1 block">Time</label><input id="sess-time-${s.id}" class="input text-center font-bold text-blue-300" value="${s.start_time || '08:30 AM'}"></div>
+                                <div class="w-full lg:w-24"><label class="text-[9px] font-black text-slate-600 uppercase mb-1 block">Seats</label><input type="number" id="sess-slots-${s.id}" class="input text-center font-bold text-blue-500" value="${s.slots_available}"></div>
+                                <div class="w-full lg:w-64"><label class="text-[9px] font-black text-slate-600 uppercase mb-1 block">Site</label><select id="sess-loc-${s.id}" class="input">${appData.locations.map(l => `<option value="${l.id}" ${l.id === s.location_id ? 'selected' : ''}>${l.name}</option>`).join('')}</select></div>
+                                <div class="flex gap-2 w-full lg:w-auto">
+                                    <button onclick="saveSession(${s.id})" class="btn-save flex-1 lg:flex-none">SAVE</button>
+                                    <button onclick="deleteRow('booking_sessions', ${s.id})" class="btn-delete">✕</button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            if(tab === 'locations') {
+                area.innerHTML = `
+                    <div class="flex justify-between items-center mb-6"><h2 class="text-blue-500 uppercase text-xs italic font-black">Launch Sites</h2><button onclick="addLocation()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase">+ New Site</button></div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${appData.locations.map(l => `
+                            <div class="card space-y-4">
+                                <input id="loc-name-${l.id}" class="input font-bold" value="${l.name}">
+                                <div class="flex gap-3">
+                                    <select id="loc-status-${l.id}" class="input !text-xs font-bold uppercase"><option value="available" ${l.status === 'available' ? 'selected' : ''}>Operational</option><option value="not-flyable" ${l.status === 'not-flyable' ? 'selected' : ''}>Blown Out</option></select>
+                                    <button onclick="saveLocation(${l.id})" class="btn-save">SAVE</button>
+                                    <button onclick="deleteRow('booking_locations', ${l.id})" class="btn-delete">✕</button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            if(tab === 'addons') {
+                area.innerHTML = `
+                    <div class="flex justify-between items-center mb-6"><h2 class="text-blue-500 uppercase text-xs italic font-black">Inclusions</h2><button onclick="addAddon()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase">+ New Addon</button></div>
+                    <div class="grid gap-3">
+                        ${appData.addons.map(a => `
+                            <div class="card grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                                <input id="add-name-${a.id}" class="input font-bold" value="${a.name}">
+                                <input type="number" id="add-price-${a.id}" class="input text-blue-400 font-bold" value="${a.price}">
+                                <select id="add-status-${a.id}" class="input uppercase text-[10px] font-bold"><option value="active" ${a.status === 'active' ? 'selected' : ''}>Visible</option><option value="inactive" ${a.status === 'inactive' ? 'selected' : ''}>Hidden</option></select>
+                                <div class="flex gap-2"><button onclick="saveAddon(${a.id})" class="btn-save flex-1">SAVE</button><button onclick="deleteRow('booking_addons', ${a.id})" class="btn-delete">✕</button></div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            if(tab === 'price') {
+                const base = appData.config.find(c => c.key === 'basePrice')?.value || 20000;
+                area.innerHTML = `
+                    <div class="card max-w-sm">
+                        <h2 class="font-black uppercase italic text-blue-500 mb-6 text-xs">Standard Pilot Fee</h2>
+                        <input id="bp-val" type="number" value="${base}" class="input text-3xl font-black text-blue-400 py-5">
+                        <button onclick="savePrice()" class="btn-primary w-full mt-4">Update Live Price</button>
+                    </div>
+                `;
+            }
+        };
+
+        // --- HANDLERS ---
+        window.createNewSession = async function() {
+            const dateVal = document.getElementById('new-date').value;
+            const timeVal = document.getElementById('new-time').value;
+            const slots = document.getElementById('new-slots').value;
+            const locId = document.getElementById('new-loc').value;
+            if(!dateVal || !timeVal) return alert("Select date and time.");
+
+            const dateObj = new Date(dateVal);
+            const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: '2-digit' });
+            
+            const [h, m] = timeVal.split(':');
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const formattedTime = `${((h % 12) || 12)}:${m} ${ampm}`;
+
+            const { error } = await client.from('booking_sessions').insert([{ 
+                date_text: formattedDate, slots_available: parseInt(slots), location_id: parseInt(locId), start_time: formattedTime, status: 'active' 
+            }]);
+            if(error) alert(error.message); else loadData();
+        };
+
+        window.saveSession = async function(id) {
+            const payload = {
+                date_text: document.getElementById(`sess-date-${id}`).value,
+                start_time: document.getElementById(`sess-time-${id}`).value,
+                slots_available: parseInt(document.getElementById(`sess-slots-${id}`).value),
+                location_id: parseInt(document.getElementById(`sess-loc-${id}`).value)
+            };
+            await client.from('booking_sessions').update(payload).eq('id', id);
+            alert("Mission Plan Saved.");
+        };
+
+        window.addLocation = async function() {
+            const name = prompt("Site Name:");
+            if(name) { await client.from('booking_locations').insert([{ name, status: 'available' }]); loadData(); }
+        };
+
+        window.saveLocation = async function(id) {
+            const payload = { name: document.getElementById(`loc-name-${id}`).value, status: document.getElementById(`loc-status-${id}`).value };
+            await client.from('booking_locations').update(payload).eq('id', id);
+            alert("Site Updated.");
+        };
+
+        window.addAddon = async function() {
+            const name = prompt("Addon Name:");
+            if(name) { await client.from('booking_addons').insert([{ name, price: 5000, description: 'User extra', status: 'active' }]); loadData(); }
+        };
+
+        window.saveAddon = async function(id) {
+            const payload = { name: document.getElementById(`add-name-${id}`).value, price: parseInt(document.getElementById(`add-price-${id}`).value), status: document.getElementById(`add-status-${id}`).value };
+            await client.from('booking_addons').update(payload).eq('id', id);
+            alert("Add-on Updated.");
+        };
+
+        window.savePrice = async function() {
+            const val = document.getElementById('bp-val').value;
+            await client.from('booking_config').update({ value: val }).eq('key', 'basePrice');
+            alert("Price Saved.");
+            loadData();
+        };
+
+        window.deleteRow = async function(table, id) {
+            if(confirm("Permanently Delete?")) {
+                const { error } = await client.from(table).delete().eq('id', id);
+                if(error) alert("Error: Make sure no sessions are linked to this site before deleting.");
+                else loadData();
+            }
+        };
+
+        checkAuth();
+    </script>
+</body>
+</html>
