@@ -8,42 +8,44 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <style>
         body { background-color: #020617; font-family: system-ui, sans-serif; color: #f8fafc; -webkit-tap-highlight-color: transparent; }
-        .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 1.5rem; padding: 1.25rem; }
+        .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 1.5rem; padding: 1.25rem; transition: all 0.3s; }
+        .card:hover { border-color: #3b82f6; }
         .input { background: #020617 !important; border: 1px solid #334155 !important; padding: 0.75rem; border-radius: 0.75rem; color: white !important; width: 100%; outline: none; font-size: 16px; }
-        .btn-primary { background: #2563eb; color: white; padding: 0.8rem; border-radius: 0.75rem; font-weight: 800; cursor: pointer; text-transform: uppercase; border: none; }
-        .btn-save { background: #10b981; color: white; padding: 0.6rem 1rem; border-radius: 0.75rem; font-size: 12px; font-weight: 900; }
-        .tab-btn { padding-bottom: 1rem; border-bottom: 2px solid transparent; color: #64748b; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; transition: all 0.2s; }
-        .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .btn-primary { background: #2563eb; color: white; padding: 0.75rem; border-radius: 0.75rem; font-weight: 800; cursor: pointer; text-transform: uppercase; border: none; }
+        .btn-save { background: #10b981; color: white; padding: 0.6rem 1.2rem; border-radius: 0.75rem; font-size: 12px; font-weight: 900; }
+        .btn-delete { color: #ef4444; font-weight: bold; padding: 0.5rem; font-size: 20px; }
+        .tab-active { border-bottom: 3px solid #3b82f6; color: #3b82f6; }
+        ::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; cursor: pointer; }
         .hidden { display: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
     </style>
 </head>
 <body class="p-4 md:p-10">
 
-    <!-- LOGIN -->
-    <div id="login-zone" class="fixed inset-0 z-50 flex items-center justify-center bg-[#020617] px-6">
-        <div class="card w-full max-w-sm text-center border-blue-900/20">
-            <h1 class="text-2xl font-black italic uppercase mb-8 tracking-tighter">Pilot <span class="text-blue-500">Access</span></h1>
+    <!-- LOGIN SCREEN -->
+    <div id="login-zone" class="fixed inset-0 z-50 flex items-center justify-center bg-[#020617] px-4">
+        <div class="card w-full max-w-sm text-center shadow-2xl">
+            <h1 class="text-2xl font-black italic uppercase mb-8">Pilot <span class="text-blue-500">Access</span></h1>
             <div class="space-y-4">
                 <input type="email" id="email" placeholder="Email" class="input">
                 <input type="password" id="password" placeholder="Password" class="input">
-                <button id="login-btn" onclick="signIn()" class="btn-primary w-full">Open Systems</button>
+                <button onclick="signIn()" class="btn-primary w-full">Open Command Center</button>
             </div>
         </div>
     </div>
 
-    <!-- DASHBOARD -->
+    <!-- MAIN DASHBOARD -->
     <div id="dashboard" class="hidden max-w-6xl mx-auto pb-20">
         <header class="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
-            <h1 class="text-xl font-black uppercase italic tracking-tighter text-white">CSFA <span class="text-blue-600">OPS</span></h1>
+            <h1 class="text-xl font-black uppercase italic text-white tracking-widest leading-none">CSFA <span class="text-blue-600">COMMAND</span></h1>
             <button onclick="signOut()" class="text-[10px] font-black text-slate-500 uppercase border border-slate-800 px-4 py-2 rounded-full">Logout</button>
         </header>
 
-        <nav class="flex gap-8 text-[11px] mb-10 overflow-x-auto no-scrollbar border-b border-white/5">
-            <button onclick="switchTab('sessions')" id="t-sessions" class="tab-btn tab-active whitespace-nowrap">Sessions</button>
-            <button onclick="switchTab('locations')" id="t-locations" class="tab-btn whitespace-nowrap">Sites</button>
-            <button onclick="switchTab('addons')" id="t-addons" class="tab-btn whitespace-nowrap">Add-ons</button>
-            <button onclick="switchTab('settings')" id="t-settings" class="tab-btn whitespace-nowrap">Global Settings</button>
+        <nav class="flex gap-8 text-[11px] font-black uppercase tracking-widest mb-10 overflow-x-auto no-scrollbar border-b border-white/5">
+            <button onclick="switchTab('sessions')" id="t-sessions" class="pb-4 tab-active whitespace-nowrap">Flight Sessions</button>
+            <button onclick="switchTab('locations')" id="t-locations" class="pb-4 whitespace-nowrap">Flying Sites</button>
+            <button onclick="switchTab('addons')" id="t-addons" class="pb-4 whitespace-nowrap">Add-ons</button>
+            <button onclick="switchTab('settings')" id="t-settings" class="pb-4 whitespace-nowrap">Settings</button>
         </nav>
 
         <div id="content-area"></div>
@@ -59,13 +61,10 @@
 
         // --- AUTH ---
         window.signIn = async function() {
-            const btn = document.getElementById('login-btn');
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
-            btn.innerText = "Verifying...";
             const { error } = await client.auth.signInWithPassword({ email, password });
-            if (error) { alert(error.message); btn.innerText = "Open Systems"; } 
-            else checkAuth();
+            if (error) alert(error.message); else checkAuth();
         };
 
         window.signOut = async function() { await client.auth.signOut(); location.reload(); };
@@ -87,7 +86,7 @@
                 client.from('booking_config').select('*')
             ]);
             appData = { sessions: s.data, locations: l.data, addons: a.data, config: c.data };
-            switchTab(currentTab); // Return to the tab you were on
+            switchTab(currentTab);
         }
 
         // --- UI ---
@@ -99,23 +98,31 @@
 
             if(tab === 'sessions') {
                 area.innerHTML = `
-                    <div class="card border-blue-600/20 mb-8">
-                        <h3 class="text-blue-500 font-bold uppercase text-[10px] mb-4 tracking-widest">Add New Date</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                            <input type="date" id="new-date" class="input">
-                            <select id="new-loc" class="input">${appData.locations.map(l => `<option value="${l.id}">${l.name}</option>`).join('')}</select>
-                            <input type="number" id="new-slots" class="input" placeholder="Seats" value="5">
+                    <div class="card border-blue-500/30 mb-10">
+                        <h3 class="text-blue-500 font-bold uppercase text-[10px] mb-4 tracking-widest italic">Plan Flight Mission</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                            <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Date</label><input type="date" id="new-date" class="input"></div>
+                            <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Time</label><input type="time" id="new-time" class="input" value="08:30"></div>
+                            <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Site</label><select id="new-loc" class="input">${appData.locations.map(l => `<option value="${l.id}">${l.name}</option>`).join('')}</select></div>
+                            <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Seats</label><input type="number" id="new-slots" class="input" value="5"></div>
                             <button onclick="createNewSession()" class="btn-primary">Add Flight</button>
                         </div>
                     </div>
-                    <div class="space-y-3">
+                    <div class="space-y-4">
                         ${appData.sessions.map(s => `
-                            <div class="card flex flex-col md:flex-row gap-4 items-end">
-                                <div class="flex-1 w-full"><label class="text-[9px] font-bold text-slate-500 uppercase">Label</label><input id="sess-date-${s.id}" class="input mt-1" value="${s.date_text}"></div>
-                                <div class="w-full md:w-24"><label class="text-[9px] font-bold text-slate-500 uppercase">Seats</label><input type="number" id="sess-slots-${s.id}" class="input mt-1 text-center" value="${s.slots_available}"></div>
-                                <div class="flex gap-2 w-full md:w-auto">
-                                    <button onclick="saveSession(${s.id})" class="btn-save flex-1">SAVE</button>
-                                    <button onclick="deleteRow('booking_sessions', ${s.id})" class="p-2 text-red-500">✕</button>
+                            <div class="card space-y-4">
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                                    <div class="md:col-span-1"><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Date Label</label><input id="sess-date-${s.id}" class="input font-bold" value="${s.date_text}"></div>
+                                    <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Launch Time</label><input id="sess-time-${s.id}" class="input text-center text-blue-300" value="${s.start_time || '08:30 AM'}"></div>
+                                    <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Seats</label><input type="number" id="sess-slots-${s.id}" class="input text-center text-blue-500 font-bold" value="${s.slots_available}"></div>
+                                    <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Site</label><select id="sess-loc-${s.id}" class="input">${appData.locations.map(l => `<option value="${l.id}" ${l.id === s.location_id ? 'selected' : ''}>${l.name}</option>`).join('')}</select></div>
+                                </div>
+                                <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-2 border-t border-white/5">
+                                    <button onclick="broadcastWhatsApp(${s.id})" class="bg-green-600/20 text-green-400 border border-green-500/30 px-6 py-2 rounded-lg text-[10px] font-black uppercase w-full md:w-auto hover:bg-green-600 hover:text-white transition-all">Broadcast WhatsApp</button>
+                                    <div class="flex gap-2 w-full md:w-auto">
+                                        <button onclick="saveSession(${s.id})" class="btn-save flex-1 md:flex-none">SAVE</button>
+                                        <button onclick="deleteRow('booking_sessions', ${s.id})" class="p-2 text-red-500">✕</button>
+                                    </div>
                                 </div>
                             </div>
                         `).join('')}
@@ -143,15 +150,15 @@
 
             if(tab === 'addons') {
                 area.innerHTML = `
-                    <div class="mb-6"><button onclick="addAddon()" class="btn-primary px-10">+ New Addon</button></div>
+                    <div class="mb-6"><button onclick="addAddon()" class="btn-primary px-10">+ Create New Addon</button></div>
                     <div class="space-y-4">
                         ${appData.addons.map(a => `
-                            <div class="card space-y-4 border-slate-800">
+                            <div class="card space-y-4">
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div class="md:col-span-2"><label class="text-[9px] font-bold text-slate-500 uppercase ml-2">Name</label><input id="add-name-${a.id}" class="input" value="${a.name}"></div>
                                     <div><label class="text-[9px] font-bold text-slate-500 uppercase ml-2">Price (LKR)</label><input type="number" id="add-price-${a.id}" class="input text-blue-400 font-bold" value="${a.price}"></div>
                                 </div>
-                                <div><label class="text-[9px] font-bold text-slate-500 uppercase ml-2">Description</label><input id="add-desc-${a.id}" class="input" value="${a.description || ''}" placeholder="e.g. 4K raw footage from GoPro"></div>
+                                <div><label class="text-[9px] font-bold text-slate-500 uppercase ml-2">Description</label><input id="add-desc-${a.id}" class="input text-xs" value="${a.description || ''}"></div>
                                 <div class="flex gap-2">
                                     <select id="add-status-${a.id}" class="input !text-xs uppercase"><option value="active" ${a.status === 'active' ? 'selected' : ''}>Visible</option><option value="inactive" ${a.status === 'inactive' ? 'selected' : ''}>Hidden</option></select>
                                     <button onclick="saveAddon(${a.id})" class="btn-save w-full">SAVE ADDON</button>
@@ -165,28 +172,40 @@
 
             if(tab === 'settings') {
                 const base = appData.config.find(c => c.key === 'basePrice')?.value || 20000;
-                const locTag = appData.config.find(c => c.key === 'location')?.value || "";
                 area.innerHTML = `
                     <div class="card max-w-md space-y-6">
-                        <h2 class="text-blue-500 font-black uppercase text-xs italic">Global Site Settings</h2>
-                        <div><label class="text-[9px] font-bold text-slate-500 uppercase block mb-2">Default Pilot Fee (LKR)</label><input id="cfg-price" type="number" value="${base}" class="input text-2xl font-black text-blue-400"></div>
-                        <div><label class="text-[9px] font-bold text-slate-500 uppercase block mb-2">Active Site Display Name</label><input id="cfg-loc" type="text" value="${locTag}" class="input"></div>
-                        <button onclick="saveGlobalConfig()" class="btn-primary w-full">Update Global Data</button>
+                        <h2 class="text-blue-500 font-black uppercase text-xs italic tracking-widest">Global Configuration</h2>
+                        <div><label class="text-[9px] font-bold text-slate-500 uppercase block mb-2">Pilot Base Rate (LKR)</label><input id="cfg-price" type="number" value="${base}" class="input text-2xl font-black text-blue-400"></div>
+                        <button onclick="saveGlobalConfig()" class="btn-primary w-full">Apply Live Changes</button>
                     </div>
                 `;
             }
         };
 
-        // --- HANDLERS ---
+        // --- NOTIFICATIONS ---
+        window.broadcastWhatsApp = function(id) {
+            const date = document.getElementById(`sess-date-${id}`).value;
+            const time = document.getElementById(`sess-time-${id}`).value;
+            const slots = document.getElementById(`sess-slots-${id}`).value;
+            const siteName = document.getElementById(`sess-loc-${id}`).selectedOptions[0].text;
+            const msg = `🪂 *CSFA FLIGHT UPDATE*\n\nWe are flying at *${siteName}*!\n\n📅 *Date:* ${date}\n⏰ *Mission Start:* ${time}\n🎟️ *Availability:* Only ${slots} slots remaining.\n\nReserve your flight now at: https://csfa.lk/booking/`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+        };
+
+        // --- ACTION HANDLERS ---
         window.createNewSession = async function() {
             const dateVal = document.getElementById('new-date').value;
-            if(!dateVal) return alert("Pick a date.");
+            const timeVal = document.getElementById('new-time').value;
+            if(!dateVal || !timeVal) return alert("Select date and time.");
             const dateObj = new Date(dateVal);
             const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: '2-digit' });
-            
+            const [h, m] = timeVal.split(':');
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const formattedTime = `${((h % 12) || 12)}:${m} ${ampm}`;
+
             await client.from('booking_sessions').insert([{ 
                 date_text: formattedDate, slots_available: parseInt(document.getElementById('new-slots').value), 
-                location_id: parseInt(document.getElementById('new-loc').value), start_time: '08:30 AM', status: 'active' 
+                location_id: parseInt(document.getElementById('new-loc').value), start_time: formattedTime, status: 'active' 
             }]);
             loadData();
         };
@@ -194,9 +213,11 @@
         window.saveSession = async function(id) {
             await client.from('booking_sessions').update({ 
                 date_text: document.getElementById(`sess-date-${id}`).value,
-                slots_available: parseInt(document.getElementById(`sess-slots-${id}`).value)
+                start_time: document.getElementById(`sess-time-${id}`).value,
+                slots_available: parseInt(document.getElementById(`sess-slots-${id}`).value),
+                location_id: parseInt(document.getElementById(`sess-loc-${id}`).value)
             }).eq('id', id);
-            alert("Saved.");
+            alert("Updated.");
         };
 
         window.addLocation = async function() {
@@ -205,11 +226,8 @@
         };
 
         window.saveLocation = async function(id) {
-            await client.from('booking_locations').update({ 
-                name: document.getElementById(`loc-name-${id}`).value, 
-                status: document.getElementById(`loc-status-${id}`).value 
-            }).eq('id', id);
-            alert("Site Updated.");
+            await client.from('booking_locations').update({ name: document.getElementById(`loc-name-${id}`).value, status: document.getElementById(`loc-status-${id}`).value }).eq('id', id);
+            alert("Site Saved.");
         };
 
         window.addAddon = async function() {
@@ -224,20 +242,21 @@
                 description: document.getElementById(`add-desc-${id}`).value,
                 status: document.getElementById(`add-status-${id}`).value 
             }).eq('id', id);
-            alert("Add-on Updated.");
+            alert("Add-on Saved.");
+            loadData();
         };
 
         window.saveGlobalConfig = async function() {
             await client.from('booking_config').update({ value: document.getElementById('cfg-price').value }).eq('key', 'basePrice');
-            await client.from('booking_config').update({ value: document.getElementById('cfg-loc').value }).eq('key', 'location');
-            alert("Global settings updated.");
+            alert("Global configuration applied.");
             loadData();
         };
 
         window.deleteRow = async function(table, id) {
             if(confirm("Confirm deletion?")) {
                 const { error } = await client.from(table).delete().eq('id', id);
-                if(error) alert("Error: Remove linked data first."); else loadData();
+                if(error) alert("Dependency Error: Clear linked flight dates before removing a site.");
+                else loadData();
             }
         };
 
