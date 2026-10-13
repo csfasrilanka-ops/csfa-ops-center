@@ -37,12 +37,44 @@
     <!-- MAIN DASHBOARD -->
     <div id="dashboard" class="hidden max-w-6xl mx-auto pb-20">
         <header class="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
-            <h1 class="text-xl font-black uppercase italic text-white tracking-widest leading-none">CSFA <span class="text-blue-600">COMMAND</span></h1>
-            <button onclick="signOut()" class="text-[10px] font-black text-slate-500 uppercase border border-slate-800 px-4 py-2 rounded-full">Logout</button>
+            <div>
+                <h1 class="text-xl font-black uppercase italic text-white tracking-widest leading-none">CSFA <span class="text-blue-600">COMMAND</span></h1>
+                <span class="text-[9px] text-slate-500 uppercase tracking-widest font-mono mt-1 block">Airspace & Inventory Ops</span>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <!-- NOTIFICATION BELL -->
+                <div class="relative">
+                    <button onclick="toggleNoticeModal()" class="relative p-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-blue-500 text-white transition flex items-center justify-center cursor-pointer">
+                        <svg class="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                        <span id="notice-badge" class="hidden absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-[10px] font-black rounded-full flex items-center justify-center text-white border-2 border-slate-950">0</span>
+                    </button>
+
+                    <!-- NOTIFICATIONS POPUP -->
+                    <div id="notice-modal" class="hidden absolute right-0 mt-3 w-80 bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-2xl z-50">
+                        <div class="flex justify-between items-center border-b border-white/5 pb-2 mb-3">
+                            <span class="text-xs font-black uppercase tracking-wider text-white">Alerts & Passes</span>
+                            <span id="notice-count" class="text-[9px] text-blue-400 font-mono">0 Pending</span>
+                        </div>
+                        <div id="notice-list" class="space-y-2 max-h-60 overflow-y-auto text-xs">
+                            <p class="text-slate-500 italic py-2 text-center">No alerts right now.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="signOut()" class="text-[10px] font-black text-slate-500 hover:text-red-400 uppercase border border-slate-800 px-4 py-2.5 rounded-full transition">Logout</button>
+            </div>
         </header>
 
+        <!-- TABS -->
         <nav class="flex gap-8 text-[11px] font-black uppercase tracking-widest mb-10 overflow-x-auto no-scrollbar border-b border-white/5">
             <button onclick="switchTab('sessions')" id="t-sessions" class="pb-4 tab-active whitespace-nowrap">Flight Sessions</button>
+            <button onclick="switchTab('passes')" id="t-passes" class="pb-4 whitespace-nowrap flex items-center gap-2">
+                <span>Site Flight Passes</span>
+                <span id="pass-indicator" class="hidden w-2 h-2 rounded-full bg-yellow-400"></span>
+            </button>
             <button onclick="switchTab('locations')" id="t-locations" class="pb-4 whitespace-nowrap">Flying Sites</button>
             <button onclick="switchTab('addons')" id="t-addons" class="pb-4 whitespace-nowrap">Add-ons</button>
             <button onclick="switchTab('settings')" id="t-settings" class="pb-4 whitespace-nowrap">Settings</button>
@@ -56,7 +88,7 @@
         const SB_KEY = "sb_publishable_KHW9RkQqLeB1YMSrSSHowg_tOe_KjdT"; 
         const client = window.supabase.createClient(SB_URL, SB_KEY);
 
-        let appData = { sessions: [], locations: [], addons: [], config: [] };
+        let appData = { sessions: [], locations: [], addons: [], config: [], passes: [] };
         let currentTab = 'sessions';
 
         // --- AUTH ---
@@ -79,23 +111,70 @@
         }
 
         async function loadData() {
-            const [s, l, a, c] = await Promise.all([
+            const [s, l, a, c, p] = await Promise.all([
                 client.from('booking_sessions').select('*').order('id', { ascending: false }),
                 client.from('booking_locations').select('*').order('id', { ascending: true }),
                 client.from('booking_addons').select('*').order('id', { ascending: true }),
-                client.from('booking_config').select('*')
+                client.from('booking_config').select('*'),
+                client.from('site_pass_requests').select('*').order('created_at', { ascending: false })
             ]);
-            appData = { sessions: s.data, locations: l.data, addons: a.data, config: c.data };
+            
+            appData = { 
+                sessions: s.data || [], 
+                locations: l.data || [], 
+                addons: a.data || [], 
+                config: c.data || [], 
+                passes: p.data || [] 
+            };
+
+            updateNotifications();
             switchTab(currentTab);
         }
 
-        // --- UI ---
+        function updateNotifications() {
+            const pending = appData.passes.filter(p => p.status === 'pending_verification');
+            const badge = document.getElementById('notice-badge');
+            const count = document.getElementById('notice-count');
+            const list = document.getElementById('notice-list');
+            const indicator = document.getElementById('pass-indicator');
+
+            if (pending.length > 0) {
+                badge.innerText = pending.length;
+                badge.classList.remove('hidden');
+                indicator.classList.remove('hidden');
+                count.innerText = `${pending.length} Pending Passes`;
+
+                list.innerHTML = pending.map(item => `
+                    <div onclick="switchTab('passes')" class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-blue-500 cursor-pointer">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-white uppercase text-[11px]">${item.pilot_name}</span>
+                            <span class="text-[9px] text-yellow-400 font-mono">LKR ${item.total_fee}</span>
+                        </div>
+                        <p class="text-[10px] text-slate-400 mt-0.5">${item.site_name} • ${item.duration_days} Day(s)</p>
+                    </div>
+                `).join('');
+            } else {
+                badge.classList.add('hidden');
+                indicator.classList.add('hidden');
+                count.innerText = `All Clear`;
+                list.innerHTML = `<p class="text-slate-500 italic py-2 text-center text-xs">No pending flight pass requests.</p>`;
+            }
+        }
+
+        window.toggleNoticeModal = function() {
+            document.getElementById('notice-modal')?.classList.toggle('hidden');
+        };
+
+        // --- UI TABS ---
         window.switchTab = function(tab) {
             currentTab = tab;
             const area = document.getElementById('content-area');
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('tab-active', 'text-blue-500'));
-            document.getElementById('t-'+tab).classList.add('tab-active', 'text-blue-500');
+            const activeBtn = document.getElementById('t-' + tab);
+            if (activeBtn) activeBtn.classList.add('tab-active', 'text-blue-500');
+            document.getElementById('notice-modal')?.classList.add('hidden');
 
+            // 1. SESSIONS TAB
             if(tab === 'sessions') {
                 area.innerHTML = `
                     <div class="card border-blue-500/30 mb-10">
@@ -130,6 +209,72 @@
                 `;
             }
 
+            // 2. SITE FLIGHT PASSES TAB (NEW)
+            if(tab === 'passes') {
+                area.innerHTML = `
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 class="text-blue-500 uppercase text-xs italic font-black tracking-widest">Visiting Pilot Flight Passes</h2>
+                            <p class="text-[10px] text-slate-500 mt-1">Review credentials, change pass status, and broadcast WhatsApp verification.</p>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        ${appData.passes.length > 0 ? appData.passes.map(p => `
+                            <div class="card space-y-4 border-slate-800">
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                                    <div>
+                                        <label class="text-[9px] font-bold text-slate-500 uppercase block mb-1">Pilot Name</label>
+                                        <input id="pass-name-${p.id}" class="input font-bold" value="${p.pilot_name}">
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] font-bold text-slate-500 uppercase block mb-1">Target Site</label>
+                                        <input id="pass-site-${p.id}" class="input text-blue-400" value="${p.site_name}">
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] font-bold text-slate-500 uppercase block mb-1">Start Date</label>
+                                        <input type="date" id="pass-date-${p.id}" class="input font-mono text-xs" value="${p.start_date}">
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] font-bold text-slate-500 uppercase block mb-1">Status</label>
+                                        <select id="pass-status-${p.id}" class="input uppercase text-xs font-bold">
+                                            <option value="pending_verification" ${p.status === 'pending_verification' ? 'selected' : ''}>⏳ Pending</option>
+                                            <option value="issued" ${p.status === 'issued' ? 'selected' : ''}>✅ Issued / Paid</option>
+                                            <option value="rejected" ${p.status === 'rejected' ? 'selected' : ''}>❌ Rejected</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 text-xs">
+                                    <div>
+                                        <span class="text-slate-500 text-[9px] block uppercase font-bold">License / Glider</span>
+                                        <span class="text-white font-mono">${p.appi_fai_number || 'N/A'} • ${p.glider_details || 'Unspecified'}</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-slate-500 text-[9px] block uppercase font-bold">Duration & Compliance Fee</span>
+                                        <span class="text-yellow-400 font-bold">${p.duration_days} Day(s) • LKR ${p.total_fee}</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-slate-500 text-[9px] block uppercase font-bold">Contact</span>
+                                        <span class="text-slate-300 font-mono">${p.pilot_phone} • ${p.pilot_email}</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-3 border-t border-white/5">
+                                    <button onclick="whatsappPilotPass('${p.id}')" class="bg-green-600/20 text-green-400 border border-green-500/30 px-6 py-2 rounded-lg text-[10px] font-black uppercase w-full md:w-auto hover:bg-green-600 hover:text-white transition-all">
+                                        💬 WhatsApp Pilot Briefing
+                                    </button>
+                                    <div class="flex gap-2 w-full md:w-auto">
+                                        <button onclick="savePass('${p.id}')" class="btn-save flex-1 md:flex-none">SAVE</button>
+                                        <button onclick="deleteRow('site_pass_requests', '${p.id}')" class="p-2 text-red-500">✕</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No site flight passes requested yet.</p>'}
+                    </div>
+                `;
+            }
+
+            // 3. LOCATIONS TAB
             if(tab === 'locations') {
                 area.innerHTML = `
                     <div class="mb-6"><button onclick="addLocation()" class="btn-primary px-10">+ Create New Site</button></div>
@@ -148,6 +293,7 @@
                 `;
             }
 
+            // 4. ADDONS TAB
             if(tab === 'addons') {
                 area.innerHTML = `
                     <div class="mb-6"><button onclick="addAddon()" class="btn-primary px-10">+ Create New Addon</button></div>
@@ -170,6 +316,7 @@
                 `;
             }
 
+            // 5. SETTINGS TAB
             if(tab === 'settings') {
                 const base = appData.config.find(c => c.key === 'basePrice')?.value || 20000;
                 area.innerHTML = `
@@ -182,7 +329,7 @@
             }
         };
 
-        // --- NOTIFICATIONS ---
+        // --- BROADCASTS & ACTIONS ---
         window.broadcastWhatsApp = function(id) {
             const date = document.getElementById(`sess-date-${id}`).value;
             const time = document.getElementById(`sess-time-${id}`).value;
@@ -192,7 +339,26 @@
             window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
         };
 
-        // --- ACTION HANDLERS ---
+        window.whatsappPilotPass = function(id) {
+            const pass = appData.passes.find(p => p.id === id);
+            if (!pass) return;
+            const cleanPhone = pass.pilot_phone.replace(/[^0-9]/g, '');
+            const msg = `👋 Hi ${pass.pilot_name},\n\nThis is CSFA Airspace Operations regarding your *Site Takeoff Pass* for *${pass.site_name}* starting *${pass.start_date}*.\n\nStatus: *${pass.status.toUpperCase()}*\nFee: LKR ${pass.total_fee}\n\nOur duty pilot will coordinate your launch marshal briefing.`;
+            window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+        };
+
+        window.savePass = async function(id) {
+            const payload = {
+                pilot_name: document.getElementById(`pass-name-${id}`).value,
+                site_name: document.getElementById(`pass-site-${id}`).value,
+                start_date: document.getElementById(`pass-date-${id}`).value,
+                status: document.getElementById(`pass-status-${id}`).value
+            };
+            const { error } = await client.from('site_pass_requests').update(payload).eq('id', id);
+            if (error) alert(error.message);
+            else { alert("Pass updated."); loadData(); }
+        };
+
         window.createNewSession = async function() {
             const dateVal = document.getElementById('new-date').value;
             const timeVal = document.getElementById('new-time').value;
@@ -255,7 +421,7 @@
         window.deleteRow = async function(table, id) {
             if(confirm("Confirm deletion?")) {
                 const { error } = await client.from(table).delete().eq('id', id);
-                if(error) alert("Dependency Error: Clear linked flight dates before removing a site.");
+                if(error) alert(error.message);
                 else loadData();
             }
         };
