@@ -2,10 +2,22 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>CSFA | Command</title>
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#020617">
+    <link rel="icon" type="image/png" href="icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="CSFA Command">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" integrity="sha384-RkASv+6KfBMW9eknReJIJ6b3UnjKOKC5bOUaNgIY778NFbQ8MtWq9Lr/khUgqtTt" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/themes/dark.css" integrity="sha384-heUUtXw0Djj2DElfLOVPlASSWFKNL3JDY6s3FEqQD03GYyWOeophY5DsfEG40sYX" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" integrity="sha384-5JqMv4L/Xa0hfvtF06qboNdhvuYXUku9ZrhZh3bSk8VXF0A/RuSLHpLsSV9Zqhl6" crossorigin="anonymous"></script>
     <style>
         body { background-color: #020617; font-family: system-ui, sans-serif; color: #f8fafc; -webkit-tap-highlight-color: transparent; }
         .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 1.5rem; padding: 1.25rem; transition: all 0.3s; }
@@ -15,9 +27,35 @@
         .btn-save { background: #10b981; color: white; padding: 0.6rem 1.2rem; border-radius: 0.75rem; font-size: 12px; font-weight: 900; }
         .btn-delete { color: #ef4444; font-weight: bold; padding: 0.5rem; font-size: 20px; }
         .tab-active { border-bottom: 3px solid #3b82f6; color: #3b82f6; }
+        .icon-btn { width: 2.25rem; height: 2.25rem; border-radius: 0.75rem; border: 1px solid #1e293b; color: #94a3b8; font-weight: 900; }
+        .icon-btn:hover:not(:disabled) { border-color: #3b82f6; color: #fff; }
+        .icon-btn:disabled, .photo-btn:disabled { opacity: 0.25; cursor: default; }
+        .photo-btn { padding: 0.6rem 0; color: #94a3b8; font-size: 13px; }
+        .ga-drop-active { border-color: #60a5fa !important; border-style: solid !important; background: rgba(37, 99, 235, 0.18) !important; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25); }
+        .photo-btn:hover:not(:disabled) { background: #1e293b; color: #fff; }
         ::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; cursor: pointer; }
         .hidden { display: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        /* Installed app: keep content clear of the notch / home indicator */
+        @media (display-mode: standalone) {
+            body { padding-top: calc(env(safe-area-inset-top) + 1rem); padding-bottom: calc(env(safe-area-inset-bottom) + 1rem); }
+        }
+        #pwa-toasts { padding-bottom: env(safe-area-inset-bottom); }
+        /* Phones: 16px fields stop iOS zooming on focus; fade hints that the tab bar scrolls */
+        @media (max-width: 767px) {
+            input.input, select.input, textarea.input, .flatpickr-input { font-size: 16px !important; }
+            .tab-scroller { mask-image: linear-gradient(to right, #000 85%, transparent); -webkit-mask-image: linear-gradient(to right, #000 85%, transparent); }
+        }
+        @media (display-mode: standalone) { #tab-bar { top: env(safe-area-inset-top); } }
+        /* Safari ignores padding/colours on native selects unless appearance is reset */
+        select.input {
+            -webkit-appearance: none; appearance: none; padding-right: 2.5rem; cursor: pointer;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2364748b'%3E%3Cpath d='M5.5 7.5l4.5 4.5 4.5-4.5'/%3E%3C/svg%3E") !important;
+            background-repeat: no-repeat !important; background-position: right 0.85rem center !important; background-size: 1rem !important;
+        }
+        .flatpickr-calendar { background: #0f172a; border: 1px solid #1e293b; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+        .flatpickr-months .flatpickr-month, .flatpickr-current-month .flatpickr-monthDropdown-months, span.flatpickr-weekday { background: #0f172a; }
+        .flatpickr-day.selected, .flatpickr-day.selected:hover { background: #2563eb; border-color: #2563eb; }
     </style>
 </head>
 <body class="p-4 md:p-10">
@@ -30,6 +68,8 @@
                 <input type="email" id="email" placeholder="Email" class="input">
                 <input type="password" id="password" placeholder="Password" class="input">
                 <button onclick="signIn()" class="btn-primary w-full">Open Command Center</button>
+                <p id="login-error" class="hidden text-xs text-red-400 bg-red-950/40 border border-red-800/50 rounded-xl p-3"></p>
+                <button onclick="installApp()" class="pwa-install hidden w-full text-[10px] font-black uppercase tracking-widest text-blue-400 border border-blue-500/30 rounded-xl py-2.5 hover:bg-blue-600 hover:text-white transition">⬇ Install App</button>
             </div>
         </div>
     </div>
@@ -38,7 +78,7 @@
     <div id="dashboard" class="hidden max-w-6xl mx-auto pb-20">
         <header class="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
             <div>
-                <h1 class="text-xl font-black uppercase italic text-white tracking-widest leading-none">CSFA <span class="text-blue-600">COMMAND</span></h1>
+                <h1 class="text-base sm:text-xl font-black uppercase italic text-white tracking-wider sm:tracking-widest leading-none whitespace-nowrap">CSFA <span class="text-blue-600">COMMAND</span></h1>
                 <span class="text-[9px] text-slate-500 uppercase tracking-widest font-mono mt-1 block">Airspace & Inventory Ops</span>
             </div>
             
@@ -51,32 +91,56 @@
                         <span id="notice-badge" class="hidden absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-[10px] font-black rounded-full flex items-center justify-center text-white border-2 border-slate-950">0</span>
                     </button>
 
-                    <div id="notice-modal" class="hidden absolute right-0 mt-3 w-80 bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-2xl z-50">
+                    <div id="notice-modal" class="hidden fixed inset-x-4 top-20 md:absolute md:inset-x-auto md:top-auto md:right-0 md:mt-3 md:w-80 bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-2xl z-50">
                         <div class="flex justify-between items-center border-b border-white/5 pb-2 mb-3">
-                            <span class="text-xs font-black uppercase tracking-wider text-white">Pending Pass Requests</span>
+                            <span class="text-xs font-black uppercase tracking-wider text-white">Pending Requests</span>
                             <span id="notice-count" class="text-[9px] text-blue-400 font-mono">0 Pending</span>
                         </div>
                         <div id="notice-list" class="space-y-2 max-h-60 overflow-y-auto text-xs"></div>
                     </div>
                 </div>
 
+                <button onclick="installApp()" class="pwa-install hidden text-[10px] font-black text-blue-400 hover:text-white hover:bg-blue-600 uppercase border border-blue-500/30 px-4 py-2.5 rounded-full transition">Install App</button>
                 <button onclick="signOut()" class="text-[10px] font-black text-slate-500 hover:text-red-400 uppercase border border-slate-800 px-4 py-2.5 rounded-full transition">Logout</button>
             </div>
         </header>
 
         <!-- TABS -->
-        <nav class="flex gap-8 text-[11px] font-black uppercase tracking-widest mb-10 overflow-x-auto no-scrollbar border-b border-white/5">
+        <nav id="tab-bar" class="tab-scroller sticky top-0 z-40 -mx-4 px-4 md:mx-0 md:px-0 bg-[#020617]/95 backdrop-blur flex gap-6 md:gap-8 text-[11px] font-black uppercase tracking-widest mb-8 md:mb-10 pt-3 md:pt-0 overflow-x-auto no-scrollbar border-b border-white/5">
+            <button onclick="switchTab('applications')" id="t-applications" class="pb-4 whitespace-nowrap flex items-center gap-2">
+                <span>Pending Requests</span>
+                <span id="app-indicator" class="hidden min-w-5 h-5 px-1.5 rounded-full bg-yellow-400 text-slate-950 text-[10px] flex items-center justify-center">0</span>
+            </button>
+            <button onclick="switchTab('members')" id="t-members" class="pb-4 whitespace-nowrap">Members</button>
             <button onclick="switchTab('sessions')" id="t-sessions" class="pb-4 tab-active whitespace-nowrap">Flight Sessions</button>
             <button onclick="switchTab('passes')" id="t-passes" class="pb-4 whitespace-nowrap flex items-center gap-2">
                 <span>Site Passes & Pricing</span>
                 <span id="pass-indicator" class="hidden w-2 h-2 rounded-full bg-yellow-400"></span>
             </button>
             <button onclick="switchTab('locations')" id="t-locations" class="pb-4 whitespace-nowrap">Flying Sites</button>
+            <button onclick="switchTab('gallery')" id="t-gallery" class="pb-4 whitespace-nowrap">Gallery</button>
             <button onclick="switchTab('addons')" id="t-addons" class="pb-4 whitespace-nowrap">Add-ons</button>
             <button onclick="switchTab('settings')" id="t-settings" class="pb-4 whitespace-nowrap">Settings</button>
+            <button onclick="switchTab('superusers')" id="t-superusers" class="pb-4 whitespace-nowrap">Super Users</button>
+            <button onclick="switchTab('audit')" id="t-audit" class="pb-4 whitespace-nowrap">Audit Log</button>
         </nav>
 
         <div id="content-area"></div>
+    </div>
+
+    <!-- PWA notices: offline, update available, iOS install hint -->
+    <div id="pwa-toasts" class="fixed bottom-4 inset-x-4 z-[60] flex flex-col items-center gap-2 pointer-events-none">
+        <div id="pwa-offline" class="hidden pointer-events-auto max-w-md w-full bg-yellow-500/15 border border-yellow-500/40 text-yellow-200 text-xs font-bold rounded-2xl px-4 py-3 shadow-2xl backdrop-blur">
+            You're offline. Data can't load or save until you reconnect.
+        </div>
+        <div id="pwa-update" class="hidden pointer-events-auto max-w-md w-full bg-slate-900 border border-blue-500/40 text-slate-200 text-xs rounded-2xl px-4 py-3 shadow-2xl flex items-center justify-between gap-3">
+            <span>A new version of the Command Center is ready.</span>
+            <button onclick="applyUpdate()" class="btn-primary !py-2 !px-4 !text-[10px] whitespace-nowrap">Reload</button>
+        </div>
+        <div id="pwa-ios" class="hidden pointer-events-auto max-w-md w-full bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-2xl px-4 py-3 shadow-2xl flex items-start justify-between gap-3">
+            <span>Install on iPhone / iPad: tap <b>Share</b> <span aria-hidden="true">⬆︎</span> then <b>Add to Home Screen</b>.</span>
+            <button onclick="dismissIosHint()" class="text-slate-500 hover:text-white text-base leading-none" aria-label="Dismiss">✕</button>
+        </div>
     </div>
 
     <script>
@@ -84,22 +148,43 @@
         const SB_KEY = "sb_publishable_KHW9RkQqLeB1YMSrSSHowg_tOe_KjdT"; 
         const client = window.supabase.createClient(SB_URL, SB_KEY);
 
-        let appData = { sessions: [], locations: [], addons: [], config: [], passes: [], passTiers: [] };
+        let appData = { sessions: [], locations: [], addons: [], config: [], passes: [], passTiers: [], users: [], members: [], photos: {} };
+        let memberSearch = '';
         let currentTab = 'sessions';
+        let audit = { rows: [], done: false, loading: false, filters: { category: '', search: '', from: '', to: '' } };
+        let gallery = { albums: [], photos: [], open: null, loaded: false, progress: '' };
 
         // --- AUTH ---
         window.signIn = async function() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             const { error } = await client.auth.signInWithPassword({ email, password });
-            if (error) alert(error.message); else checkAuth();
+            if (error) return showLoginError(error.message);
+            // Server records whether this sign-in was granted or denied.
+            await client.rpc('log_command_center_signin');
+            checkAuth();
         };
+
+        function showLoginError(msg) {
+            const el = document.getElementById('login-error');
+            el.innerText = msg;
+            el.classList.remove('hidden');
+        }
+
+        const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
         window.signOut = async function() { await client.auth.signOut(); location.reload(); };
 
         async function checkAuth() {
             const { data: { session } } = await client.auth.getSession();
             if (session) {
+                // Command Center is for super users only; club members use the club portal.
+                const { data: isSuper, error } = await client.rpc('is_super_user');
+                if (error || !isSuper) {
+                    await client.auth.signOut();
+                    showLoginError(error ? error.message : 'Access denied. This account is a club member, not a super user.');
+                    return;
+                }
                 document.getElementById('login-zone').classList.add('hidden');
                 document.getElementById('dashboard').classList.remove('hidden');
                 loadData();
@@ -107,14 +192,25 @@
         }
 
         async function loadData() {
-            const [s, l, a, c, p, pt] = await Promise.all([
+            const [s, l, a, c, p, pt, u, m] = await Promise.all([
                 client.from('booking_sessions').select('*').order('id', { ascending: false }),
                 client.from('booking_locations').select('*').order('id', { ascending: true }),
                 client.from('booking_addons').select('*').order('id', { ascending: true }),
                 client.from('booking_config').select('*'),
                 client.from('site_pass_requests').select('*').order('created_at', { ascending: false }),
-                client.from('site_pass_tiers').select('*').order('duration_days', { ascending: true })
+                client.from('site_pass_tiers').select('*').order('duration_days', { ascending: true }),
+                client.rpc('admin_list_users'),
+                client.from('members').select('*').order('applied_at', { ascending: false })
             ]);
+
+            // Member photos live in a private bucket: fetch short-lived signed URLs.
+            const members = m.data || [];
+            const paths = members.map(x => x.avatar_path).filter(Boolean);
+            let photos = {};
+            if (paths.length > 0) {
+                const { data: signed } = await client.storage.from('member-photos').createSignedUrls(paths, 3600);
+                photos = Object.fromEntries((signed || []).filter(x => x.signedUrl).map(x => [x.path, x.signedUrl]));
+            }
             
             appData = { 
                 sessions: s.data || [], 
@@ -122,7 +218,10 @@
                 addons: a.data || [], 
                 config: c.data || [], 
                 passes: p.data || [],
-                passTiers: pt.data || []
+                passTiers: pt.data || [],
+                users: u.data || [],
+                members,
+                photos
             };
 
             updateNotifications();
@@ -131,31 +230,44 @@
 
         function updateNotifications() {
             const pending = appData.passes.filter(p => p.status === 'pending_verification');
+            const applications = appData.members.filter(m => m.membership_status === 'pending');
+            const total = pending.length + applications.length;
             const badge = document.getElementById('notice-badge');
             const count = document.getElementById('notice-count');
             const list = document.getElementById('notice-list');
             const indicator = document.getElementById('pass-indicator');
+            const appIndicator = document.getElementById('app-indicator');
 
-            if (pending.length > 0) {
-                badge.innerText = pending.length;
+            appIndicator.innerText = applications.length;
+            appIndicator.classList.toggle('hidden', applications.length === 0);
+            indicator.classList.toggle('hidden', pending.length === 0);
+
+            if (total > 0) {
+                badge.innerText = total;
                 badge.classList.remove('hidden');
-                indicator.classList.remove('hidden');
-                count.innerText = `${pending.length} Pending`;
+                count.innerText = `${total} Pending`;
 
-                list.innerHTML = pending.map(item => `
+                list.innerHTML = applications.map(item => `
+                    <div onclick="switchTab('applications')" class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-blue-500 cursor-pointer">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-white uppercase text-[11px]">${esc(item.full_name || item.email)}</span>
+                            <span class="text-[9px] text-blue-400 font-mono">MEMBERSHIP</span>
+                        </div>
+                        <p class="text-[10px] text-slate-400 mt-0.5">${esc(item.pilot_rating || 'Pilot')} • ${esc(item.country || '')}</p>
+                    </div>
+                `).join('') + pending.map(item => `
                     <div onclick="switchTab('passes')" class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-blue-500 cursor-pointer">
                         <div class="flex justify-between items-center">
-                            <span class="font-bold text-white uppercase text-[11px]">${item.pilot_name}</span>
-                            <span class="text-[9px] text-yellow-400 font-mono">LKR ${item.total_fee}</span>
+                            <span class="font-bold text-white uppercase text-[11px]">${esc(item.pilot_name)}</span>
+                            <span class="text-[9px] text-yellow-400 font-mono">LKR ${esc(item.total_fee)}</span>
                         </div>
-                        <p class="text-[10px] text-slate-400 mt-0.5">${item.site_name} • ${item.duration_days} Day(s)</p>
+                        <p class="text-[10px] text-slate-400 mt-0.5">${esc(item.site_name)} • ${esc(item.duration_days)} Day(s)</p>
                     </div>
                 `).join('');
             } else {
                 badge.classList.add('hidden');
-                indicator.classList.add('hidden');
                 count.innerText = `All Clear`;
-                list.innerHTML = `<p class="text-slate-500 italic py-2 text-center text-xs">No pending flight pass requests.</p>`;
+                list.innerHTML = `<p class="text-slate-500 italic py-2 text-center text-xs">No pending membership or pass requests.</p>`;
             }
         }
 
@@ -169,7 +281,10 @@
             const area = document.getElementById('content-area');
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('tab-active', 'text-blue-500'));
             const activeBtn = document.getElementById('t-' + tab);
-            if (activeBtn) activeBtn.classList.add('tab-active', 'text-blue-500');
+            if (activeBtn) {
+                activeBtn.classList.add('tab-active', 'text-blue-500');
+                activeBtn.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+            }
             document.getElementById('notice-modal')?.classList.add('hidden');
 
             // 1. SESSIONS
@@ -260,7 +375,7 @@
                                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                                     <div>
                                         <label class="text-[9px] font-bold text-slate-400 uppercase block mb-1">Pilot Name</label>
-                                        <input id="pass-name-${p.id}" class="input font-bold" value="${p.pilot_name}">
+                                        <input id="pass-name-${p.id}" class="input font-bold" value="${esc(p.pilot_name)}">
                                     </div>
                                     <div>
                                         <label class="text-[9px] font-bold text-blue-400 uppercase block mb-1">Launch Mountain</label>
@@ -270,7 +385,7 @@
                                     </div>
                                     <div>
                                         <label class="text-[9px] font-bold text-slate-400 uppercase block mb-1">Starting Flight Date</label>
-                                        <input type="date" id="pass-date-${p.id}" class="input font-mono text-sm" value="${p.start_date}">
+                                        <input type="date" id="pass-date-${p.id}" class="input font-mono text-sm" value="${esc(p.start_date)}">
                                     </div>
                                     <div>
                                         <label class="text-[9px] font-bold text-slate-400 uppercase block mb-1">Permit Status</label>
@@ -293,24 +408,24 @@
                                     </div>
                                     <div>
                                         <label class="text-[9px] font-bold text-slate-400 uppercase block mb-1">Pilot License #</label>
-                                        <input id="pass-license-${p.id}" class="input font-mono text-xs uppercase" value="${p.appi_fai_number || ''}">
+                                        <input id="pass-license-${p.id}" class="input font-mono text-xs uppercase" value="${esc(p.appi_fai_number)}">
                                     </div>
                                     <div>
                                         <label class="text-[9px] font-bold text-slate-400 uppercase block mb-1">Glider Model</label>
-                                        <input id="pass-glider-${p.id}" class="input text-xs" value="${p.glider_details || ''}">
+                                        <input id="pass-glider-${p.id}" class="input text-xs" value="${esc(p.glider_details)}">
                                     </div>
                                 </div>
 
                                 <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-3 border-t border-white/5">
                                     <div class="text-xs font-mono text-slate-400">
-                                        <span>📞 ${p.pilot_phone}</span> • <span>✉️ ${p.pilot_email}</span>
+                                        <span>📞 ${esc(p.pilot_phone)}</span> • <span>✉️ ${esc(p.pilot_email)}</span>
                                     </div>
                                     <div class="flex items-center gap-3 w-full md:w-auto">
-                                        <button onclick="whatsappPilotPass('${p.id}')" class="bg-green-600/20 text-green-400 border border-green-500/30 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase hover:bg-green-600 hover:text-white transition-all">
+                                        <button onclick="whatsappPilotPass('${esc(p.id)}')" class="bg-green-600/20 text-green-400 border border-green-500/30 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase hover:bg-green-600 hover:text-white transition-all">
                                             💬 WhatsApp Briefing
                                         </button>
-                                        <button onclick="savePass('${p.id}')" class="btn-save flex-1 md:flex-none">SAVE</button>
-                                        <button onclick="deleteRow('site_pass_requests', '${p.id}')" class="btn-delete">✕</button>
+                                        <button onclick="savePass('${esc(p.id)}')" class="btn-save flex-1 md:flex-none">SAVE</button>
+                                        <button onclick="deleteRow('site_pass_requests', '${esc(p.id)}')" class="btn-delete">✕</button>
                                     </div>
                                 </div>
                             </div>
@@ -372,6 +487,704 @@
                     </div>
                 `;
             }
+
+            // 6. PENDING MEMBERSHIP REQUESTS
+            if(tab === 'applications') {
+                const pending = appData.members.filter(m => m.membership_status === 'pending');
+                area.innerHTML = `
+                    <div class="mb-6">
+                        <h2 class="text-yellow-400 uppercase text-xs italic font-black tracking-widest">Pending Membership Requests (${pending.length})</h2>
+                        <p class="text-[10px] text-slate-500 mt-1">Check identity, licence and safety details. Approved pilots get full club portal access. Rejecting deletes the application so the pilot can apply again.</p>
+                    </div>
+                    <div class="space-y-6">
+                        ${pending.length > 0 ? pending.map(m => memberCard(m, `
+                            <button onclick="rejectApplication('${esc(m.id)}')" class="text-[10px] font-black uppercase text-red-400 border border-red-500/30 px-5 py-2.5 rounded-xl hover:bg-red-600 hover:text-white transition">Reject</button>
+                            <button onclick="reviewMember('${esc(m.id)}', 'active')" class="btn-save !px-6 !py-2.5 uppercase">Approve</button>
+                        `, true)).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No pending membership requests.</p>'}
+                    </div>
+                `;
+            }
+
+            // 7. MEMBERS
+            if(tab === 'members') {
+                const q = memberSearch.toLowerCase();
+                const members = appData.members
+                    .filter(m => m.membership_status !== 'pending')
+                    .filter(m => !q || [m.full_name, m.email, m.pilot_rating, m.country, m.appi_license_no].some(v => (v || '').toLowerCase().includes(q)));
+                const counts = s => appData.members.filter(m => m.membership_status === s).length;
+                area.innerHTML = `
+                    <div class="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-6">
+                        <div>
+                            <h2 class="text-blue-500 uppercase text-xs italic font-black tracking-widest">Club Members</h2>
+                            <p class="text-[10px] text-slate-500 mt-1">${counts('active')} active • ${counts('suspended')} suspended • ${counts('rejected')} rejected</p>
+                        </div>
+                        <input id="member-search" oninput="memberSearch = this.value; switchTab('members'); const el = document.getElementById('member-search'); el.focus(); el.setSelectionRange(el.value.length, el.value.length);" value="${esc(memberSearch)}" placeholder="Search name, email, rating, licence…" class="input md:max-w-xs">
+                    </div>
+                    <div class="space-y-4">
+                        ${members.length > 0 ? members.map(m => memberCard(m, m.membership_status === 'active'
+                            ? `<button onclick="reviewMember('${esc(m.id)}', 'suspended')" class="text-[10px] font-black uppercase text-red-400 border border-red-500/30 px-5 py-2.5 rounded-xl hover:bg-red-600 hover:text-white transition">Suspend</button>`
+                            : `<button onclick="reviewMember('${esc(m.id)}', 'active')" class="btn-save !px-6 !py-2.5 uppercase">Reactivate</button>`
+                        , false)).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No members match.</p>'}
+                    </div>
+                `;
+            }
+
+            // 10. GALLERY
+            if(tab === 'gallery') {
+                if (!gallery.loaded) {
+                    area.innerHTML = '<p class="text-slate-500 italic py-8 text-center text-xs">Loading gallery…</p>';
+                    loadGallery();
+                } else {
+                    area.innerHTML = gallery.open ? galleryAlbumView(gallery.open) : galleryListView();
+                }
+            }
+
+            // 9. AUDIT LOG
+            if(tab === 'audit') {
+                const f = audit.filters;
+                area.innerHTML = `
+                    <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+                        <div>
+                            <h2 class="text-blue-500 uppercase text-xs italic font-black tracking-widest">Audit Log</h2>
+                            <p class="text-[10px] text-slate-500 mt-1">Every admin change, membership decision, sign-in and account event. Entries can't be edited or deleted.</p>
+                        </div>
+                        <button onclick="exportAuditCsv()" class="text-[10px] font-black uppercase text-slate-300 border border-slate-700 px-4 py-2.5 rounded-xl hover:border-blue-500 transition whitespace-nowrap">Export CSV</button>
+                    </div>
+                    <div class="card mb-6 grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Category</label>
+                            <select id="audit-category" class="input text-xs" onchange="setAuditFilter('category', this.value)">
+                                <option value="">Everything</option>
+                                ${Object.entries(AUDIT_CATEGORIES).map(([k, v]) => `<option value="${k}" ${f.category === k ? 'selected' : ''}>${v}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Search</label>
+                            <input id="audit-search" class="input text-xs" placeholder="Email, name, action…" value="${esc(f.search)}" oninput="clearTimeout(window.__auditT); window.__auditT = setTimeout(() => setAuditFilter('search', this.value), 400)">
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">From</label>
+                            <input type="date" data-placeholder="Any date" class="input text-xs" value="${esc(f.from)}" onchange="setAuditFilter('from', this.value)">
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">To</label>
+                            <input type="date" data-placeholder="Any date" class="input text-xs" value="${esc(f.to)}" onchange="setAuditFilter('to', this.value)">
+                        </div>
+                    </div>
+                    <div id="audit-list" class="space-y-2"></div>
+                    <div class="text-center mt-6"><button id="audit-more" onclick="loadAudit(false)" class="hidden text-[10px] font-black uppercase text-blue-400 border border-blue-500/30 px-6 py-2.5 rounded-xl hover:bg-blue-600 hover:text-white transition">Load More</button></div>
+                `;
+                if (audit.rows.length === 0 && !audit.done) loadAudit(true); else renderAudit();
+            }
+
+            initDatePickers();
+
+            // 8. SUPER USERS
+            if(tab === 'superusers') {
+                const supers = appData.users.filter(u => u.is_super);
+                const members = appData.users.filter(u => !u.is_super);
+                const row = (u, action) => `
+                    <div class="flex justify-between items-center gap-4 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                        <div class="min-w-0">
+                            <p class="font-bold text-white text-sm truncate">${esc(u.full_name || 'Unnamed Pilot')}</p>
+                            <p class="text-[11px] text-slate-400 font-mono truncate">${esc(u.email)}</p>
+                        </div>
+                        ${action}
+                    </div>`;
+                area.innerHTML = `
+                    <div class="card border-blue-500/30 mb-10 space-y-4">
+                        <div>
+                            <h3 class="text-blue-500 font-black uppercase text-xs tracking-widest italic">Grant Super User Access</h3>
+                            <p class="text-[10px] text-slate-400 mt-1">Super users can sign in to the Command Center and manage all ops data. The account must already exist.</p>
+                        </div>
+                        <div class="flex flex-col md:flex-row gap-3">
+                            <input type="email" id="su-email" placeholder="pilot@email.com" class="input">
+                            <button onclick="grantSuperUser(document.getElementById('su-email').value)" class="btn-primary px-8 whitespace-nowrap">Grant Access</button>
+                        </div>
+                    </div>
+
+                    <h2 class="text-blue-500 uppercase text-xs italic font-black tracking-widest mb-4">Super Users (${supers.length})</h2>
+                    <div class="grid gap-3 mb-10">
+                        ${supers.map(u => row(u, `<button onclick="revokeSuperUser('${u.user_id}')" class="text-[10px] font-black uppercase text-red-400 border border-red-500/30 px-4 py-2 rounded-xl hover:bg-red-600 hover:text-white transition whitespace-nowrap">Revoke</button>`)).join('')}
+                    </div>
+
+                    <h2 class="text-slate-400 uppercase text-xs italic font-black tracking-widest mb-4">Club Members (${members.length})</h2>
+                    <div class="grid gap-3">
+                        ${members.length > 0 ? members.map(u => row(u, `<button onclick="grantSuperUser('${esc(u.email)}')" class="text-[10px] font-black uppercase text-blue-400 border border-blue-500/30 px-4 py-2 rounded-xl hover:bg-blue-600 hover:text-white transition whitespace-nowrap">Make Super User</button>`)).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No club member accounts.</p>'}
+                    </div>
+                `;
+            }
+        };
+
+        // --- MEMBERSHIP ---
+        const STATUS_STYLE = {
+            pending: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+            active: 'bg-green-500/10 text-green-400 border-green-500/30',
+            suspended: 'bg-red-500/10 text-red-400 border-red-500/30',
+            rejected: 'bg-slate-500/10 text-slate-400 border-slate-500/30'
+        };
+
+        function ageFrom(dob) {
+            if (!dob) return '';
+            const d = new Date(dob), now = new Date();
+            let age = now.getFullYear() - d.getFullYear();
+            if (now < new Date(now.getFullYear(), d.getMonth(), d.getDate())) age--;
+            return ` (${age} yrs)`;
+        }
+
+        // Flags dates that are already past (licence, insurance, reserve older than 12 months).
+        function dateCell(value, { maxAgeMonths } = {}) {
+            if (!value) return '<span class="text-slate-600">—</span>';
+            const d = new Date(value);
+            const limit = new Date();
+            if (maxAgeMonths) limit.setMonth(limit.getMonth() - maxAgeMonths);
+            const bad = maxAgeMonths ? d < limit : d < new Date();
+            return `<span class="${bad ? 'text-red-400 font-bold' : ''}">${esc(value)}${bad ? ' ⚠' : ''}</span>`;
+        }
+
+        function memberCard(m, actions, expanded) {
+            const photo = (m.avatar_path && appData.photos[m.avatar_path]) || m.avatar_url;
+            const field = (label, value) => `
+                <div>
+                    <span class="text-[9px] font-bold text-slate-500 uppercase block">${label}</span>
+                    <span class="text-xs text-slate-200 break-words">${value}</span>
+                </div>`;
+            const txt = v => v ? esc(v) : '<span class="text-slate-600">—</span>';
+            const status = m.membership_status || 'pending';
+            return `
+                <div class="card space-y-5">
+                    <div class="flex flex-col md:flex-row gap-5 md:items-center">
+                        ${photo
+                            ? `<a href="${esc(photo)}" target="_blank" rel="noopener"><img src="${esc(photo)}" class="w-20 h-20 rounded-2xl object-cover border border-slate-700" alt=""></a>`
+                            : `<div class="w-20 h-20 rounded-2xl border border-dashed border-red-500/50 text-[9px] text-red-400 font-bold uppercase flex items-center justify-center text-center p-2">No photo</div>`}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <h3 class="text-lg font-black uppercase italic text-white">${esc(m.full_name || 'Unnamed Pilot')}</h3>
+                                <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${STATUS_STYLE[status] || STATUS_STYLE.pending}">${esc(status)}</span>
+                                ${m.blood_type ? `<span class="px-2.5 py-0.5 rounded-full text-[9px] font-black border bg-red-500/10 text-red-300 border-red-500/30">🩸 ${esc(m.blood_type)}</span>` : ''}
+                            </div>
+                            <p class="text-[11px] text-slate-400 font-mono mt-1">${esc(m.email)} • ${esc(m.phone_number || 'no phone')}</p>
+                            <p class="text-[10px] text-slate-500 mt-0.5">${esc(m.pilot_rating || 'No rating')} • ${esc(m.country || '—')} • Applied ${m.applied_at ? new Date(m.applied_at).toLocaleDateString() : '—'}${m.waiver_accepted_at ? ' • ✅ Declaration signed' : ' • ⚠ No declaration'}</p>
+                            ${m.review_note ? `<p class="text-[10px] text-slate-400 italic mt-1">Note: ${esc(m.review_note)}</p>` : ''}
+                        </div>
+                        <div class="flex gap-2 flex-wrap">${actions}</div>
+                    </div>
+                    <details ${expanded ? 'open' : ''} class="border-t border-white/5 pt-4">
+                        <summary class="text-[10px] font-black uppercase tracking-widest text-blue-400 cursor-pointer">Full Application</summary>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                            ${field('Date of Birth', txt(m.date_of_birth) + esc(ageFrom(m.date_of_birth)))}
+                            ${field('NIC / Passport', txt(m.nic_passport_no))}
+                            ${field('Weight', m.weight_kg ? esc(m.weight_kg) + ' kg' : txt(null))}
+                            ${field('Address', txt(m.address))}
+                            ${field('Medical / Allergies', txt(m.medical_conditions))}
+                            ${field('APPI License', txt(m.appi_license_no))}
+                            ${field('FAI / IPPI License', txt(m.fai_license_no))}
+                            ${field('License Expiry', dateCell(m.license_expiry))}
+                            ${field('Years Flying', txt(m.years_flying))}
+                            ${field('Flight Hours', txt(m.total_flight_hours))}
+                            ${field('Glider', txt(m.glider_brand_model))}
+                            ${field('Reserve Repacked', dateCell(m.reserve_repack_date, { maxAgeMonths: 12 }))}
+                            ${field('Insurance', txt([m.insurance_provider, m.insurance_policy_no].filter(Boolean).join(' • ')))}
+                            ${field('Insurance Expiry', dateCell(m.insurance_expiry))}
+                            ${field('Emergency Contact', txt([m.emergency_contact_name, m.emergency_contact_relation].filter(Boolean).join(' • ')))}
+                            ${field('Emergency Phone', txt(m.emergency_contact_phone))}
+                        </div>
+                    </details>
+                </div>`;
+        }
+
+        window.reviewMember = async function(id, status) {
+            const m = appData.members.find(x => x.id === id);
+            const name = m?.full_name || m?.email || 'this pilot';
+            let note = null;
+            if (status === 'rejected' || status === 'suspended') {
+                note = prompt(`Reason for ${status === 'rejected' ? 'rejecting' : 'suspending'} ${name} (shown to the pilot):`);
+                if (note === null) return;
+            } else if (!confirm(`Approve ${name} as an active CSFA member?`)) {
+                return;
+            }
+            const { error } = await client.rpc('review_membership', { target_member_id: id, new_status: status, note });
+            if (error) alert(error.message); else loadData();
+        };
+
+        // Deletes the pending applicant's account + member record so they can register again,
+        // then clears their stored files (Supabase only allows file deletes via the Storage API).
+        window.rejectApplication = async function(id) {
+            const m = appData.members.find(x => x.id === id);
+            const name = m?.full_name || m?.email || 'this pilot';
+            if (!confirm(`Reject and delete ${name}'s application?\n\nTheir account, details and photo will be permanently removed. They can register again with the same email.`)) return;
+
+            const { error } = await client.rpc('reject_and_delete_application', { target_member_id: id });
+            if (error) return alert(error.message);
+
+            for (const bucket of ['member-photos', 'flight-tracks']) {
+                const { data: files } = await client.storage.from(bucket).list(id, { limit: 1000 });
+                const paths = (files || []).map(f => `${id}/${f.name}`);
+                if (paths.length > 0) await client.storage.from(bucket).remove(paths);
+            }
+            loadData();
+        };
+
+        // Same calendar in every browser (Safari's native date input shows today's date when empty).
+        function initDatePickers() {
+            if (!window.flatpickr) return;
+            document.querySelectorAll('#content-area input[type=date]').forEach(el => {
+                if (el._flatpickr) return;
+                flatpickr(el, { dateFormat: 'Y-m-d', altInput: true, altFormat: 'j M Y', altInputClass: el.className, disableMobile: true, allowInput: false });
+                el._flatpickr.altInput.placeholder = el.dataset.placeholder || 'Select date…';
+            });
+        }
+
+        // --- GALLERY ---
+        // Albums/photos in Supabase; images in the public `gallery` bucket, resized in the browser before upload.
+        const GALLERY_BUCKET = 'gallery';
+        const galleryUrl = path => client.storage.from(GALLERY_BUCKET).getPublicUrl(path).data.publicUrl;
+        const albumPhotos = albumId => gallery.photos.filter(p => p.album_id === albumId);
+
+        async function loadGallery() {
+            const [a, p] = await Promise.all([
+                client.from('gallery_albums').select('*').order('sort_order').order('created_at'),
+                client.from('gallery_photos').select('*').order('sort_order').order('created_at')
+            ]);
+            if (a.error || p.error) {
+                document.getElementById('content-area').innerHTML = `<p class="text-red-400 text-xs text-center py-8">${esc((a.error || p.error).message)}</p>`;
+                return;
+            }
+            gallery.albums = a.data || [];
+            gallery.photos = p.data || [];
+            gallery.loaded = true;
+            if (gallery.open && !gallery.albums.some(x => x.id === gallery.open)) gallery.open = null;
+            if (currentTab === 'gallery') switchTab('gallery');
+        }
+
+        function galleryListView() {
+            return `
+                <div class="card border-blue-500/30 mb-8 space-y-3">
+                    <h3 class="text-blue-500 font-bold uppercase text-[10px] tracking-widest italic">New Album</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-3">
+                        <input id="ga-new-title" class="input" maxlength="120" placeholder="Album title, e.g. Festival 2026">
+                        <input id="ga-new-desc" class="input" maxlength="1000" placeholder="Short description (optional)">
+                        <button onclick="createAlbum()" class="btn-primary px-6">Create</button>
+                    </div>
+                </div>
+                ${gallery.albums.length === 0 ? '<p class="text-slate-500 italic py-8 text-center text-xs">No albums yet. Create one, then add photos.</p>' : ''}
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    ${gallery.albums.map((al, i) => {
+                        const photos = albumPhotos(al.id);
+                        const cover = photos.find(p => p.id === al.cover_photo_id) || photos[0];
+                        return `
+                        <div class="card !p-0 overflow-hidden flex flex-col">
+                            <button onclick="openAlbum('${esc(al.id)}')" class="block aspect-[4/3] bg-slate-950 relative">
+                                ${cover ? `<img src="${esc(galleryUrl(cover.thumb_path))}" class="w-full h-full object-cover" alt="" loading="lazy">` : '<span class="absolute inset-0 flex items-center justify-center text-slate-600 text-xs uppercase font-bold">No photos</span>'}
+                                ${al.is_published ? '' : '<span class="absolute top-3 left-3 px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-slate-950/80 text-yellow-300 border border-yellow-500/40">Hidden</span>'}
+                            </button>
+                            <div class="p-4 flex items-center justify-between gap-3">
+                                <div class="min-w-0">
+                                    <p class="font-black text-white uppercase italic truncate">${esc(al.title)}</p>
+                                    <p class="text-[10px] text-slate-500">${photos.length} photo${photos.length === 1 ? '' : 's'}</p>
+                                </div>
+                                <div class="flex gap-1 shrink-0">
+                                    <button onclick="moveAlbum('${esc(al.id)}', -1)" ${i === 0 ? 'disabled' : ''} class="icon-btn" aria-label="Move up">↑</button>
+                                    <button onclick="moveAlbum('${esc(al.id)}', 1)" ${i === gallery.albums.length - 1 ? 'disabled' : ''} class="icon-btn" aria-label="Move down">↓</button>
+                                    <button onclick="openAlbum('${esc(al.id)}')" class="btn-primary !py-2 !px-4 !text-[10px]">Open</button>
+                                </div>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>`;
+        }
+
+        function galleryAlbumView(albumId) {
+            const al = gallery.albums.find(a => a.id === albumId);
+            if (!al) return '';
+            const photos = albumPhotos(albumId);
+            return `
+                <button onclick="closeAlbum()" class="text-[10px] font-black uppercase text-slate-400 hover:text-white mb-6">← All Albums</button>
+                <div class="card mb-6 space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-3">
+                        <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Title</label><input id="ga-title" class="input font-bold" maxlength="120" value="${esc(al.title)}"></div>
+                        <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Description</label><input id="ga-desc" class="input" maxlength="1000" value="${esc(al.description || '')}"></div>
+                    </div>
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <label class="flex items-center gap-3 text-xs text-slate-300 cursor-pointer">
+                            <input type="checkbox" id="ga-published" class="w-4 h-4 accent-blue-600" ${al.is_published ? 'checked' : ''}>
+                            Show this album on the website
+                        </label>
+                        <div class="flex gap-2">
+                            <button onclick="deleteAlbum('${esc(al.id)}')" class="text-[10px] font-black uppercase text-red-400 border border-red-500/30 px-4 py-2.5 rounded-xl hover:bg-red-600 hover:text-white transition">Delete Album</button>
+                            <button onclick="saveAlbum('${esc(al.id)}')" class="btn-save uppercase">Save</button>
+                        </div>
+                    </div>
+                </div>
+
+                <label id="ga-drop" class="block card border-dashed border-blue-500/40 text-center cursor-pointer hover:bg-blue-950/20 mb-6 transition">
+                    <span class="text-blue-400 font-black uppercase text-xs tracking-widest">+ Add Photos</span>
+                    <span class="block text-[10px] text-slate-500 mt-1"><span class="hidden md:inline">Drag &amp; drop photos anywhere on this page, or click to choose. </span><span class="md:hidden">Tap to choose photos. </span>JPG, PNG or WebP. Large photos are resized automatically.</span>
+                    <span class="ga-drop-hint hidden block text-sm text-white font-black uppercase tracking-widest mt-3">Drop to upload</span>
+                    <input type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden" onchange="uploadPhotos('${esc(al.id)}', this.files); this.value = '';">
+                </label>
+                <p id="ga-progress" class="${gallery.progress ? '' : 'hidden'} text-xs text-blue-300 font-bold text-center mb-6">${esc(gallery.progress)}</p>
+
+                ${photos.length === 0 ? '<p class="text-slate-500 italic py-8 text-center text-xs">No photos in this album yet.</p>' : ''}
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    ${photos.map((p, i) => `
+                        <div class="bg-slate-900 border ${p.is_published ? 'border-slate-800' : 'border-yellow-500/40'} rounded-2xl overflow-hidden flex flex-col">
+                            <div class="relative aspect-square bg-slate-950">
+                                <img src="${esc(galleryUrl(p.thumb_path))}" class="w-full h-full object-cover ${p.is_published ? '' : 'opacity-40'}" alt="" loading="lazy">
+                                ${al.cover_photo_id === p.id ? '<span class="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-blue-600 text-white">Cover</span>' : ''}
+                                ${p.is_published ? '' : '<span class="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-slate-950/80 text-yellow-300">Hidden</span>'}
+                            </div>
+                            <input class="input !rounded-none !border-x-0 !border-b-0 !text-xs !py-2" maxlength="300" placeholder="Add caption…" value="${esc(p.caption || '')}" onchange="savePhotoCaption('${esc(p.id)}', this.value)">
+                            <div class="grid grid-cols-5 border-t border-slate-800">
+                                <button onclick="movePhoto('${esc(p.id)}', -1)" ${i === 0 ? 'disabled' : ''} class="photo-btn" aria-label="Move earlier">◀</button>
+                                <button onclick="movePhoto('${esc(p.id)}', 1)" ${i === photos.length - 1 ? 'disabled' : ''} class="photo-btn" aria-label="Move later">▶</button>
+                                <button onclick="setCover('${esc(al.id)}', '${esc(p.id)}')" class="photo-btn ${al.cover_photo_id === p.id ? '!text-blue-400' : ''}" aria-label="Set as cover">★</button>
+                                <button onclick="togglePhoto('${esc(p.id)}')" class="photo-btn" aria-label="${p.is_published ? 'Hide' : 'Show'} photo">${p.is_published ? '👁' : '🚫'}</button>
+                                <button onclick="deletePhoto('${esc(p.id)}')" class="photo-btn !text-red-400" aria-label="Delete photo">✕</button>
+                            </div>
+                        </div>`).join('')}
+                </div>`;
+        }
+
+        window.openAlbum = function(id) { gallery.open = id; switchTab('gallery'); window.scrollTo(0, 0); };
+        window.closeAlbum = function() { gallery.open = null; switchTab('gallery'); };
+
+        window.createAlbum = async function() {
+            const title = document.getElementById('ga-new-title').value.trim();
+            const description = document.getElementById('ga-new-desc').value.trim() || null;
+            if (!title) return alert('Give the album a title.');
+            const sort_order = Math.max(0, ...gallery.albums.map(a => a.sort_order)) + 10;
+            const { data, error } = await client.from('gallery_albums').insert([{ title, description, sort_order }]).select().single();
+            if (error) return alert(error.message);
+            gallery.open = data.id;
+            loadGallery();
+        };
+
+        window.saveAlbum = async function(id) {
+            const title = document.getElementById('ga-title').value.trim();
+            if (!title) return alert('Album title is required.');
+            const { error } = await client.from('gallery_albums').update({
+                title,
+                description: document.getElementById('ga-desc').value.trim() || null,
+                is_published: document.getElementById('ga-published').checked,
+                updated_at: new Date().toISOString()
+            }).eq('id', id);
+            if (error) alert(error.message); else loadGallery();
+        };
+
+        async function removeGalleryFiles(paths) {
+            for (let i = 0; i < paths.length; i += 100) {
+                await client.storage.from(GALLERY_BUCKET).remove(paths.slice(i, i + 100));
+            }
+        }
+
+        window.deleteAlbum = async function(id) {
+            const al = gallery.albums.find(a => a.id === id);
+            const photos = albumPhotos(id);
+            if (!confirm(`Delete the album "${al?.title}" and its ${photos.length} photo(s)? This can't be undone.`)) return;
+            const { error } = await client.from('gallery_albums').delete().eq('id', id);
+            if (error) return alert(error.message);
+            await removeGalleryFiles(photos.flatMap(p => [p.path, p.thumb_path]));
+            gallery.open = null;
+            loadGallery();
+        };
+
+        // Swap with a neighbour, then renumber the list in steps of 10.
+        async function reorder(table, list, id, dir) {
+            const i = list.findIndex(x => x.id === id);
+            const j = i + dir;
+            if (i < 0 || j < 0 || j >= list.length) return;
+            const items = list.slice();
+            [items[i], items[j]] = [items[j], items[i]];
+            const changes = items.map((x, k) => ({ id: x.id, sort_order: (k + 1) * 10, old: x.sort_order })).filter(x => x.sort_order !== x.old);
+            const results = await Promise.all(changes.map(c => client.from(table).update({ sort_order: c.sort_order }).eq('id', c.id)));
+            const failed = results.find(r => r.error);
+            if (failed) alert(failed.error.message);
+            loadGallery();
+        }
+
+        window.moveAlbum = (id, dir) => reorder('gallery_albums', gallery.albums, id, dir);
+        window.movePhoto = (id, dir) => {
+            const photo = gallery.photos.find(p => p.id === id);
+            return reorder('gallery_photos', albumPhotos(photo.album_id), id, dir);
+        };
+
+        window.setCover = async function(albumId, photoId) {
+            const { error } = await client.from('gallery_albums').update({ cover_photo_id: photoId }).eq('id', albumId);
+            if (error) alert(error.message); else loadGallery();
+        };
+
+        window.togglePhoto = async function(id) {
+            const photo = gallery.photos.find(p => p.id === id);
+            const { error } = await client.from('gallery_photos').update({ is_published: !photo.is_published }).eq('id', id);
+            if (error) alert(error.message); else loadGallery();
+        };
+
+        window.savePhotoCaption = async function(id, caption) {
+            const { error } = await client.from('gallery_photos').update({ caption: caption.trim() || null }).eq('id', id);
+            if (error) alert(error.message);
+            else { const p = gallery.photos.find(x => x.id === id); if (p) p.caption = caption.trim() || null; }
+        };
+
+        window.deletePhoto = async function(id) {
+            const photo = gallery.photos.find(p => p.id === id);
+            if (!photo || !confirm('Delete this photo from the gallery?')) return;
+            const { error } = await client.from('gallery_photos').delete().eq('id', id);
+            if (error) return alert(error.message);
+            await removeGalleryFiles([photo.path, photo.thumb_path]);
+            loadGallery();
+        };
+
+        // Resize in the browser: WebP where supported (JPEG fallback), long edge <= maxEdge.
+        async function resizeImage(img, maxEdge, quality) {
+            const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+            const w = Math.round(img.naturalWidth * scale);
+            const h = Math.round(img.naturalHeight * scale);
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, w, h);
+            const toBlob = type => new Promise(resolve => canvas.toBlob(resolve, type, quality));
+            let blob = await toBlob('image/webp');
+            if (!blob || blob.type !== 'image/webp') blob = await toBlob('image/jpeg');
+            return { blob, w, h, ext: blob.type === 'image/webp' ? 'webp' : 'jpg' };
+        }
+
+        // Drag & drop: drop photos anywhere while an album is open. The drop box lights up during a drag;
+        // a short timer clears it because Safari's dragleave events are unreliable.
+        let dragClearTimer = null;
+        const dragHasFiles = e => Array.from(e.dataTransfer?.types || []).includes('Files');
+        const galleryDropActive = () => currentTab === 'gallery' && !!gallery.open;
+        const setDropHighlight = on => {
+            const zone = document.getElementById('ga-drop');
+            if (!zone) return;
+            zone.classList.toggle('ga-drop-active', on);
+            zone.querySelector('.ga-drop-hint')?.classList.toggle('hidden', !on);
+        };
+        window.addEventListener('dragover', e => {
+            if (!dragHasFiles(e)) return;
+            e.preventDefault(); // stop the browser opening the image instead
+            if (!galleryDropActive()) { e.dataTransfer.dropEffect = 'none'; return; }
+            e.dataTransfer.dropEffect = 'copy';
+            setDropHighlight(true);
+            clearTimeout(dragClearTimer);
+            dragClearTimer = setTimeout(() => setDropHighlight(false), 150);
+        });
+        window.addEventListener('drop', e => {
+            if (!dragHasFiles(e)) return;
+            e.preventDefault();
+            setDropHighlight(false);
+            if (galleryDropActive()) uploadPhotos(gallery.open, e.dataTransfer.files);
+        });
+
+        let galleryUploading = false;
+        window.uploadPhotos = async function(albumId, fileList) {
+            const files = Array.from(fileList || []).filter(f => f.size > 0 || f.type); // dropped folders show up as empty entries
+            if (files.length === 0) return;
+            if (galleryUploading) return alert('Photos are still uploading. Wait for them to finish, then add more.');
+            galleryUploading = true;
+            try {
+                const album = gallery.albums.find(a => a.id === albumId);
+                let order = Math.max(0, ...albumPhotos(albumId).map(p => p.sort_order));
+                let firstId = null;
+                const failures = [];
+                const setProgress = text => {
+                    gallery.progress = text;
+                    const el = document.getElementById('ga-progress');
+                    if (el) { el.innerText = text; el.classList.toggle('hidden', !text); }
+                };
+
+                for (const [i, file] of files.entries()) {
+                    setProgress(`Uploading ${i + 1} of ${files.length}…`);
+                    const uploaded = [];
+                    const url = URL.createObjectURL(file);
+                    try {
+                        if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('not a JPG, PNG or WebP image');
+                        if (file.size > 30 * 1024 * 1024) throw new Error('larger than 30MB');
+                        const img = new Image();
+                        img.src = url;
+                        await img.decode();
+                        const full = await resizeImage(img, 2000, 0.85);
+                        const thumb = await resizeImage(img, 800, 0.8);
+                        const id = crypto.randomUUID();
+                        const path = `${albumId}/${id}.${full.ext}`;
+                        const thumbPath = `${albumId}/${id}-thumb.${thumb.ext}`;
+                        for (const [p, part] of [[path, full], [thumbPath, thumb]]) {
+                            const { error } = await client.storage.from(GALLERY_BUCKET).upload(p, part.blob, { contentType: part.blob.type, cacheControl: '31536000' });
+                            if (error) throw error;
+                            uploaded.push(p);
+                        }
+                        order += 10;
+                        const { error } = await client.from('gallery_photos').insert([{ id, album_id: albumId, path, thumb_path: thumbPath, width: full.w, height: full.h, sort_order: order }]);
+                        if (error) throw error;
+                        firstId = firstId || id;
+                    } catch (err) {
+                        if (uploaded.length) await removeGalleryFiles(uploaded);
+                        failures.push(`${file.name}: ${err.message || err}`);
+                    } finally {
+                        URL.revokeObjectURL(url);
+                    }
+                }
+
+                if (album && !album.cover_photo_id && firstId) await client.from('gallery_albums').update({ cover_photo_id: firstId }).eq('id', albumId);
+                setProgress('');
+                if (failures.length) alert(`Some photos weren't added:\n\n${failures.join('\n')}`);
+                loadGallery();
+            } finally {
+                galleryUploading = false;
+            }
+        };
+
+        // --- AUDIT LOG ---
+        const AUDIT_CATEGORIES = {
+            members: 'Members', super_users: 'Super Users', site_pass_requests: 'Pass Requests', site_pass_tiers: 'Pass Packages',
+            booking_sessions: 'Flight Sessions', booking_locations: 'Flying Sites', booking_addons: 'Add-ons', booking_config: 'Settings',
+            member_flights: 'Flight Logs', gallery_albums: 'Gallery Albums', gallery_photos: 'Gallery Photos',
+            command_center: 'Command Center', auth: 'Logins & Accounts'
+        };
+        const AUTH_ACTIONS = {
+            login: 'Signed in', logout: 'Signed out', user_signedup: 'Signed up', user_recovery_requested: 'Password reset requested',
+            user_confirmation_requested: 'Confirmation email sent', user_deleted: 'Account deleted', user_modified: 'Account updated',
+            user_updated_password: 'Password changed', user_invited: 'Invited', user_reauthenticate_requested: 'Re-authentication requested'
+        };
+        const SINGULAR = {
+            site_pass_requests: 'pass request', site_pass_tiers: 'pass package', booking_sessions: 'flight session',
+            booking_locations: 'flying site', booking_addons: 'add-on', booking_config: 'setting', member_flights: 'flight log',
+            gallery_albums: 'gallery album', gallery_photos: 'gallery photo'
+        };
+        const short = v => { const t = typeof v === 'string' ? v : JSON.stringify(v); return t == null ? '∅' : (t.length > 60 ? t.slice(0, 57) + '…' : t); };
+
+        function describeAudit(r) {
+            const verb = { insert: 'Created', update: 'Updated', delete: 'Deleted' }[r.action] || r.action;
+            if (r.category === 'auth') return { title: AUTH_ACTIONS[r.action] || r.action, tone: r.action === 'user_deleted' ? 'red' : 'slate' };
+            if (r.category === 'command_center') return r.action === 'signin_denied'
+                ? { title: 'Command Center access denied', tone: 'red' } : { title: 'Command Center sign-in', tone: 'blue' };
+            if (r.category === 'super_users') return r.action === 'insert'
+                ? { title: 'Granted super user', tone: 'yellow' } : r.action === 'delete' ? { title: 'Revoked super user', tone: 'red' } : { title: 'Super user updated', tone: 'slate' };
+            if (r.category === 'members') {
+                if (r.action === 'insert') return { title: 'New membership application', tone: 'blue' };
+                if (r.action === 'delete') return { title: 'Member record deleted', tone: 'red' };
+                if ((r.changed_fields || []).includes('membership_status')) {
+                    const to = r.new_data?.membership_status;
+                    return { title: `Membership ${r.old_data?.membership_status || '∅'} → ${to}`, tone: to === 'active' ? 'green' : 'red' };
+                }
+                return { title: 'Member profile updated', tone: 'slate' };
+            }
+            return { title: `${verb} ${SINGULAR[r.category] || r.category}`, tone: r.action === 'delete' ? 'red' : r.action === 'insert' ? 'green' : 'slate' };
+        }
+
+        const TONES = {
+            red: 'bg-red-500/10 text-red-300 border-red-500/30', green: 'bg-green-500/10 text-green-300 border-green-500/30',
+            blue: 'bg-blue-500/10 text-blue-300 border-blue-500/30', yellow: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30',
+            slate: 'bg-slate-800 text-slate-300 border-slate-700'
+        };
+
+        window.setAuditFilter = function(key, value) {
+            audit.filters[key] = value;
+            loadAudit(true);
+        };
+
+        window.loadAudit = async function(reset) {
+            if (audit.loading) return;
+            audit.loading = true;
+            if (reset) { audit.rows = []; audit.done = false; }
+            const f = audit.filters;
+            const { data, error } = await client.rpc('admin_audit_feed', {
+                p_limit: 100,
+                p_before: audit.rows.length ? audit.rows[audit.rows.length - 1].occurred_at : null,
+                p_category: f.category || null,
+                p_search: f.search || null,
+                p_from: f.from || null,
+                p_to: f.to || null
+            });
+            audit.loading = false;
+            if (error) {
+                const list = document.getElementById('audit-list');
+                if (list) list.innerHTML = `<p class="text-red-400 text-xs text-center py-8">${esc(error.message)}</p>`;
+                return;
+            }
+            audit.rows = audit.rows.concat(data || []);
+            audit.done = (data || []).length < 100;
+            renderAudit();
+        };
+
+        function renderAudit() {
+            const list = document.getElementById('audit-list');
+            if (!list) return;
+            document.getElementById('audit-more')?.classList.toggle('hidden', audit.done);
+            if (audit.rows.length === 0) {
+                list.innerHTML = '<p class="text-slate-500 italic py-8 text-center text-xs">No events match these filters.</p>';
+                return;
+            }
+            list.innerHTML = audit.rows.map(r => {
+                const d = describeAudit(r);
+                const changes = (r.changed_fields || []).map(k => `
+                    <div class="grid grid-cols-[minmax(0,10rem)_1fr] gap-3 py-1 border-b border-white/5">
+                        <span class="text-slate-500 font-mono truncate">${esc(k)}</span>
+                        <span class="break-words"><span class="text-red-300/80 line-through">${esc(short(r.old_data?.[k]))}</span> → <span class="text-green-300">${esc(short(r.new_data?.[k]))}</span></span>
+                    </div>`).join('');
+                const snapshot = r.action !== 'update' && (r.new_data || r.old_data)
+                    ? `<pre class="text-[10px] text-slate-400 whitespace-pre-wrap break-words max-h-64 overflow-auto bg-slate-950 rounded-xl p-3">${esc(JSON.stringify(r.new_data || r.old_data, null, 2))}</pre>` : '';
+                const hasDetail = changes || snapshot || r.ip;
+                return `
+                    <details class="bg-slate-900 border border-slate-800 rounded-2xl ${hasDetail ? '' : 'pointer-events-none'}">
+                        <summary class="list-none cursor-pointer p-3.5 flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+                            <span class="text-[10px] font-mono text-slate-500 md:w-36 shrink-0">${esc(new Date(r.occurred_at).toLocaleString())}</span>
+                            <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase border w-fit ${TONES[d.tone]}">${esc(d.title)}</span>
+                            <span class="text-xs text-white font-bold truncate">${esc(r.record_label || r.record_id || '')}</span>
+                            <span class="text-[10px] text-slate-500 uppercase md:ml-auto shrink-0">${esc(AUDIT_CATEGORIES[r.category] || r.category)}</span>
+                            <span class="text-[11px] text-slate-400 font-mono shrink-0 truncate md:max-w-[14rem]">${esc(r.actor_email || 'System')}</span>
+                        </summary>
+                        ${hasDetail ? `<div class="px-4 pb-4 text-[11px] text-slate-300 space-y-3">
+                            ${r.ip ? `<p class="text-slate-500">IP: <span class="font-mono text-slate-300">${esc(r.ip)}</span></p>` : ''}
+                            ${changes ? `<div>${changes}</div>` : ''}
+                            ${snapshot}
+                        </div>` : ''}
+                    </details>`;
+            }).join('');
+        }
+
+        // CSV of the loaded entries. Cells starting with = + - @ are prefixed so spreadsheets don't run them as formulas.
+        window.exportAuditCsv = function() {
+            if (audit.rows.length === 0) return alert('Nothing to export yet.');
+            const cell = v => {
+                let t = v == null ? '' : String(v);
+                if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+                return `"${t.replace(/"/g, '""')}"`;
+            };
+            const header = ['Time', 'Actor', 'Event', 'Category', 'Record', 'Changes', 'IP'];
+            const lines = audit.rows.map(r => [
+                new Date(r.occurred_at).toISOString(),
+                r.actor_email || 'System',
+                describeAudit(r).title,
+                AUDIT_CATEGORIES[r.category] || r.category,
+                r.record_label || r.record_id || '',
+                (r.changed_fields || []).map(k => `${k}: ${short(r.old_data?.[k])} -> ${short(r.new_data?.[k])}`).join('; '),
+                r.ip || ''
+            ].map(cell).join(','));
+            const blob = new Blob([[header.map(cell).join(','), ...lines].join('\r\n')], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `csfa-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        };
+
+        // --- SUPER USERS ---
+        window.grantSuperUser = async function(email) {
+            if (!email) return alert("Enter an email.");
+            if (!confirm(`Give ${email} full Command Center access?`)) return;
+            const { error } = await client.rpc('grant_super_user', { target_email: email });
+            if (error) alert(error.message); else loadData();
+        };
+
+        window.revokeSuperUser = async function(userId) {
+            const u = appData.users.find(x => x.user_id === userId);
+            if (!confirm(`Revoke Command Center access for ${u?.email || 'this user'}?`)) return;
+            const { error } = await client.rpc('revoke_super_user', { target_user_id: userId });
+            if (error) alert(error.message); else loadData();
         };
 
         // --- MANAGE PASS TIERS & PACKAGES ---
@@ -508,6 +1321,78 @@
                 else loadData();
             }
         };
+
+        // --- PWA ---
+        let installPrompt = null;
+        let reloadingForUpdate = false;
+        const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+        const showInstall = show => document.querySelectorAll('.pwa-install').forEach(b => b.classList.toggle('hidden', !show));
+
+        window.addEventListener('beforeinstallprompt', e => {
+            e.preventDefault();
+            installPrompt = e;
+            showInstall(true);
+        });
+        window.addEventListener('appinstalled', () => { installPrompt = null; showInstall(false); });
+
+        window.installApp = async function() {
+            if (!installPrompt) return;
+            installPrompt.prompt();
+            await installPrompt.userChoice;
+            installPrompt = null;
+            showInstall(false);
+        };
+
+        // iOS Safari has no install prompt: show a one-time hint instead.
+        const IOS_HINT_KEY = 'csfa-command-ios-hint-dismissed';
+        const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        let iosHintDismissed = false;
+        try { iosHintDismissed = localStorage.getItem(IOS_HINT_KEY) === '1'; } catch {}
+        if (isIos && !isStandalone() && !iosHintDismissed) document.getElementById('pwa-ios').classList.remove('hidden');
+        window.dismissIosHint = function() {
+            document.getElementById('pwa-ios').classList.add('hidden');
+            try { localStorage.setItem(IOS_HINT_KEY, '1'); } catch {}
+        };
+
+        const updateOnline = () => document.getElementById('pwa-offline').classList.toggle('hidden', navigator.onLine);
+        window.addEventListener('online', () => { updateOnline(); if (!document.getElementById('dashboard').classList.contains('hidden')) loadData(); });
+        window.addEventListener('offline', updateOnline);
+        updateOnline();
+
+        let waitingWorker = null;
+        window.applyUpdate = function() {
+            if (waitingWorker) waitingWorker.postMessage('SKIP_WAITING'); else location.reload();
+        };
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', async () => {
+                try {
+                    const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+                    const offerUpdate = worker => {
+                        waitingWorker = worker;
+                        document.getElementById('pwa-update').classList.remove('hidden');
+                    };
+                    if (reg.waiting && navigator.serviceWorker.controller) offerUpdate(reg.waiting);
+                    reg.addEventListener('updatefound', () => {
+                        const worker = reg.installing;
+                        worker?.addEventListener('statechange', () => {
+                            if (worker.state === 'installed' && navigator.serviceWorker.controller) offerUpdate(worker);
+                        });
+                    });
+                    // Check for a new version whenever the app comes back to the foreground.
+                    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update(); });
+                } catch (err) {
+                    console.warn('Service worker registration failed', err);
+                }
+            });
+            // Reload only when an update replaces a running version, not on first install.
+            const hadController = !!navigator.serviceWorker.controller;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!hadController || reloadingForUpdate) return;
+                reloadingForUpdate = true;
+                location.reload();
+            });
+        }
 
         checkAuth();
     </script>
