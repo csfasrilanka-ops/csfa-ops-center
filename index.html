@@ -107,12 +107,12 @@
 
         <!-- TABS -->
         <nav id="tab-bar" class="tab-scroller sticky top-0 z-40 -mx-4 px-4 md:mx-0 md:px-0 bg-[#020617]/95 backdrop-blur flex gap-6 md:gap-8 text-[11px] font-black uppercase tracking-widest mb-8 md:mb-10 pt-3 md:pt-0 overflow-x-auto no-scrollbar border-b border-white/5">
-            <button onclick="switchTab('applications')" id="t-applications" class="pb-4 whitespace-nowrap flex items-center gap-2">
+            <button onclick="switchTab('applications')" id="t-applications" class="pb-4 tab-active whitespace-nowrap flex items-center gap-2">
                 <span>Pending Requests</span>
                 <span id="app-indicator" class="hidden min-w-5 h-5 px-1.5 rounded-full bg-yellow-400 text-slate-950 text-[10px] flex items-center justify-center">0</span>
             </button>
             <button onclick="switchTab('members')" id="t-members" class="pb-4 whitespace-nowrap">Members</button>
-            <button onclick="switchTab('sessions')" id="t-sessions" class="pb-4 tab-active whitespace-nowrap">Flight Sessions</button>
+            <button onclick="switchTab('sessions')" id="t-sessions" class="pb-4 whitespace-nowrap">Flight Sessions</button>
             <button onclick="switchTab('passes')" id="t-passes" class="pb-4 whitespace-nowrap flex items-center gap-2">
                 <span>Site Passes & Pricing</span>
                 <span id="pass-indicator" class="hidden w-2 h-2 rounded-full bg-yellow-400"></span>
@@ -150,7 +150,7 @@
 
         let appData = { sessions: [], locations: [], addons: [], config: [], passes: [], passTiers: [], users: [], members: [], photos: {} };
         let memberSearch = '';
-        let currentTab = 'sessions';
+        let currentTab = 'applications';
         let audit = { rows: [], done: false, loading: false, filters: { category: '', search: '', from: '', to: '' } };
         let gallery = { albums: [], photos: [], open: null, loaded: false, progress: '' };
 
@@ -521,10 +521,10 @@
                         <input id="member-search" oninput="memberSearch = this.value; switchTab('members'); const el = document.getElementById('member-search'); el.focus(); el.setSelectionRange(el.value.length, el.value.length);" value="${esc(memberSearch)}" placeholder="Search name, email, rating, licence…" class="input md:max-w-xs">
                     </div>
                     <div class="space-y-4">
-                        ${members.length > 0 ? members.map(m => memberCard(m, m.membership_status === 'active'
+                        ${members.length > 0 ? members.map(m => memberCard(m, (m.membership_status === 'active'
                             ? `<button onclick="reviewMember('${esc(m.id)}', 'suspended')" class="text-[10px] font-black uppercase text-red-400 border border-red-500/30 px-5 py-2.5 rounded-xl hover:bg-red-600 hover:text-white transition">Suspend</button>`
                             : `<button onclick="reviewMember('${esc(m.id)}', 'active')" class="btn-save !px-6 !py-2.5 uppercase">Reactivate</button>`
-                        , false)).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No members match.</p>'}
+                        ) + (appData.users.some(u => u.user_id === m.id && u.is_super) ? '' : removeAccountButton(m.id)), false)).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No members match.</p>'}
                     </div>
                 `;
             }
@@ -584,8 +584,8 @@
                 const supers = appData.users.filter(u => u.is_super);
                 const members = appData.users.filter(u => !u.is_super);
                 const row = (u, action) => `
-                    <div class="flex justify-between items-center gap-4 bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                        <div class="min-w-0">
+                    <div class="flex flex-wrap justify-between items-center gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                        <div class="min-w-0 flex-1 basis-40">
                             <p class="font-bold text-white text-sm truncate">${esc(u.full_name || 'Unnamed Pilot')}</p>
                             <p class="text-[11px] text-slate-400 font-mono truncate">${esc(u.email)}</p>
                         </div>
@@ -610,7 +610,7 @@
 
                     <h2 class="text-slate-400 uppercase text-xs italic font-black tracking-widest mb-4">Club Members (${members.length})</h2>
                     <div class="grid gap-3">
-                        ${members.length > 0 ? members.map(u => row(u, `<button onclick="grantSuperUser('${esc(u.email)}')" class="text-[10px] font-black uppercase text-blue-400 border border-blue-500/30 px-4 py-2 rounded-xl hover:bg-blue-600 hover:text-white transition whitespace-nowrap">Make Super User</button>`)).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No club member accounts.</p>'}
+                        ${members.length > 0 ? members.map(u => row(u, `<div class="flex flex-wrap justify-end gap-2 shrink-0"><button onclick="grantSuperUser('${esc(u.email)}')" class="text-[10px] font-black uppercase text-blue-400 border border-blue-500/30 px-4 py-2 rounded-xl hover:bg-blue-600 hover:text-white transition whitespace-nowrap">Make Super User</button>${removeAccountButton(u.user_id)}</div>`)).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No club member accounts.</p>'}
                     </div>
                 `;
             }
@@ -716,12 +716,31 @@
 
             const { error } = await client.rpc('reject_and_delete_application', { target_member_id: id });
             if (error) return alert(error.message);
+            await removeAccountFiles(id);
+            loadData();
+        };
 
+        async function removeAccountFiles(id) {
             for (const bucket of ['member-photos', 'flight-tracks']) {
                 const { data: files } = await client.storage.from(bucket).list(id, { limit: 1000 });
                 const paths = (files || []).map(f => `${id}/${f.name}`);
                 if (paths.length > 0) await client.storage.from(bucket).remove(paths);
             }
+        }
+
+        const removeAccountButton = id => `<button onclick="removeAccount('${esc(id)}')" class="text-[10px] font-black uppercase text-red-400 border border-red-500/30 px-4 py-2 rounded-xl hover:bg-red-600 hover:text-white transition whitespace-nowrap">Remove Account</button>`;
+
+        // Permanently deletes a non-super-user account: login, member record, flights, passes, files.
+        window.removeAccount = async function(id) {
+            const u = appData.users.find(x => x.user_id === id);
+            const m = appData.members.find(x => x.id === id);
+            const email = u?.email || m?.email;
+            const name = m?.full_name || u?.full_name || email || 'this account';
+            if (!confirm(`Permanently remove ${name}${email && email !== name ? ` (${email})` : ''}?\n\nTheir login, member details, flight log, site passes and photos will be deleted. This can't be undone.`)) return;
+
+            const { error } = await client.rpc('delete_member_account', { target_user_id: id });
+            if (error) return alert(error.message);
+            await removeAccountFiles(id);
             loadData();
         };
 
