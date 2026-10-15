@@ -2,7 +2,7 @@
 // Caches only the app shell and its libraries so the app opens fast and installs as a PWA.
 // Supabase traffic is never cached: admin data is private and must always be live.
 // Bump VERSION whenever this file or the shell list changes.
-const VERSION = 'csfa-command-v1';
+const VERSION = 'csfa-command-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const CDN_CACHE = `${VERSION}-cdn`;
 

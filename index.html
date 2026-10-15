@@ -36,9 +36,26 @@
         ::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; cursor: pointer; }
         .hidden { display: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        /* Installed app: keep content clear of the notch / home indicator */
+        /* Installed app: keep content clear of the notch / status bar / home indicator.
+           !important: Tailwind's p-4 / md:p-10 classes on <body> would otherwise win. */
         @media (display-mode: standalone) {
-            body { padding-top: calc(env(safe-area-inset-top) + 1rem); padding-bottom: calc(env(safe-area-inset-bottom) + 1rem); }
+            body {
+                padding-top: calc(env(safe-area-inset-top) + 1rem) !important;
+                padding-bottom: calc(env(safe-area-inset-bottom) + 1rem) !important;
+                padding-left: max(1rem, env(safe-area-inset-left)) !important;
+                padding-right: max(1rem, env(safe-area-inset-right)) !important;
+            }
+        }
+        @media (display-mode: standalone) and (min-width: 768px) {
+            body {
+                padding-top: calc(env(safe-area-inset-top) + 2.5rem) !important;
+                padding-bottom: calc(env(safe-area-inset-bottom) + 2.5rem) !important;
+                padding-left: max(2.5rem, env(safe-area-inset-left)) !important;
+                padding-right: max(2.5rem, env(safe-area-inset-right)) !important;
+            }
+        }
+        @media (display-mode: standalone) and (max-width: 767px) {
+            #notice-modal { top: calc(env(safe-area-inset-top) + 5rem); }
         }
         #pwa-toasts { padding-bottom: env(safe-area-inset-bottom); }
         /* Phones: 16px fields stop iOS zooming on focus; fade hints that the tab bar scrolls */
