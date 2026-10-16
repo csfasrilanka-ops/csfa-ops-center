@@ -514,9 +514,9 @@
                         <p class="text-[10px] text-slate-500 mt-1">Check identity, licence and safety details. Approved pilots get full club portal access. Rejecting deletes the application so the pilot can apply again.</p>
                     </div>
                     <div class="space-y-6">
-                        ${pending.length > 0 ? pending.map(m => memberCard(m, `
+                        ${pending.length > 0 ? pending.map(m => memberCard(m, membershipTypePicker(m) + `
                             <button onclick="rejectApplication('${esc(m.id)}')" class="text-[10px] font-black uppercase text-red-400 border border-red-500/30 px-5 py-2.5 rounded-xl hover:bg-red-600 hover:text-white transition">Reject</button>
-                            <button onclick="reviewMember('${esc(m.id)}', 'active')" class="btn-save !px-6 !py-2.5 uppercase">Approve</button>
+                            <button onclick="approveMember('${esc(m.id)}')" class="btn-save !px-6 !py-2.5 uppercase">Approve</button>
                         `, true)).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No pending membership requests.</p>'}
                     </div>
                 `;
@@ -529,16 +529,17 @@
                     .filter(m => m.membership_status !== 'pending')
                     .filter(m => !q || [m.full_name, m.email, m.pilot_rating, m.country, m.appi_license_no].some(v => (v || '').toLowerCase().includes(q)));
                 const counts = s => appData.members.filter(m => m.membership_status === s).length;
+                const typeCount = t => appData.members.filter(m => m.membership_status !== 'pending' && m.membership_type === t).length;
                 area.innerHTML = `
                     <div class="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-6">
                         <div>
                             <h2 class="text-blue-500 uppercase text-xs italic font-black tracking-widest">Club Members</h2>
-                            <p class="text-[10px] text-slate-500 mt-1">${counts('active')} active • ${counts('suspended')} suspended • ${counts('rejected')} rejected</p>
+                            <p class="text-[10px] text-slate-500 mt-1">${counts('active')} active • ${counts('suspended')} suspended • ${counts('rejected')} rejected • ${typeCount('full')} full • ${typeCount('temporary')} temporary</p>
                         </div>
                         <input id="member-search" oninput="memberSearch = this.value; switchTab('members'); const el = document.getElementById('member-search'); el.focus(); el.setSelectionRange(el.value.length, el.value.length);" value="${esc(memberSearch)}" placeholder="Search name, email, rating, licence…" class="input md:max-w-xs">
                     </div>
                     <div class="space-y-4">
-                        ${members.length > 0 ? members.map(m => memberCard(m, (m.membership_status === 'active'
+                        ${members.length > 0 ? members.map(m => memberCard(m, membershipTypeButton(m) + (m.membership_status === 'active'
                             ? `<button onclick="reviewMember('${esc(m.id)}', 'suspended')" class="text-[10px] font-black uppercase text-red-400 border border-red-500/30 px-5 py-2.5 rounded-xl hover:bg-red-600 hover:text-white transition">Suspend</button>`
                             : `<button onclick="reviewMember('${esc(m.id)}', 'active')" class="btn-save !px-6 !py-2.5 uppercase">Reactivate</button>`
                         ) + (appData.users.some(u => u.user_id === m.id && u.is_super) ? '' : removeAccountButton(m.id)), false)).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No members match.</p>'}
@@ -605,6 +606,7 @@
                         <div class="min-w-0 flex-1 basis-40">
                             <p class="font-bold text-white text-sm truncate">${esc(u.full_name || 'Unnamed Pilot')}</p>
                             <p class="text-[11px] text-slate-400 font-mono truncate">${esc(u.email)}</p>
+                            ${u.membership_type ? `<span class="inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${TYPE_STYLE[u.membership_type] || ''}">${esc(TYPE_LABEL[u.membership_type] || u.membership_type)}</span>` : '<span class="inline-block mt-1 text-[9px] font-bold uppercase text-slate-600">No membership</span>'}
                         </div>
                         ${action}
                     </div>`;
@@ -612,7 +614,7 @@
                     <div class="card border-blue-500/30 mb-10 space-y-4">
                         <div>
                             <h3 class="text-blue-500 font-black uppercase text-xs tracking-widest italic">Grant Super User Access</h3>
-                            <p class="text-[10px] text-slate-400 mt-1">Super users can sign in to the Command Center and manage all ops data. The account must already exist.</p>
+                            <p class="text-[10px] text-slate-400 mt-1">Super users can sign in to the Command Center and manage all ops data. Only Full Members can be super users.</p>
                         </div>
                         <div class="flex flex-col md:flex-row gap-3">
                             <input type="email" id="su-email" placeholder="pilot@email.com" class="input">
@@ -627,7 +629,9 @@
 
                     <h2 class="text-slate-400 uppercase text-xs italic font-black tracking-widest mb-4">Club Members (${members.length})</h2>
                     <div class="grid gap-3">
-                        ${members.length > 0 ? members.map(u => row(u, `<div class="flex flex-wrap justify-end gap-2 shrink-0"><button onclick="grantSuperUser('${esc(u.email)}')" class="text-[10px] font-black uppercase text-blue-400 border border-blue-500/30 px-4 py-2 rounded-xl hover:bg-blue-600 hover:text-white transition whitespace-nowrap">Make Super User</button>${removeAccountButton(u.user_id)}</div>`)).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No club member accounts.</p>'}
+                        ${members.length > 0 ? members.map(u => row(u, `<div class="flex flex-wrap justify-end gap-2 shrink-0">${u.membership_type === 'full'
+                            ? `<button onclick="grantSuperUser('${esc(u.email)}')" class="text-[10px] font-black uppercase text-blue-400 border border-blue-500/30 px-4 py-2 rounded-xl hover:bg-blue-600 hover:text-white transition whitespace-nowrap">Make Super User</button>`
+                            : `<span class="text-[9px] font-bold uppercase text-slate-500 px-2 py-2 self-center" title="Only Full Members can be super users">Full Members only</span>`}${removeAccountButton(u.user_id)}</div>`)).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No club member accounts.</p>'}
                     </div>
                 `;
             }
@@ -639,6 +643,11 @@
             active: 'bg-green-500/10 text-green-400 border-green-500/30',
             suspended: 'bg-red-500/10 text-red-400 border-red-500/30',
             rejected: 'bg-slate-500/10 text-slate-400 border-slate-500/30'
+        };
+        const TYPE_LABEL = { full: 'Full Member', temporary: 'Temporary Member' };
+        const TYPE_STYLE = {
+            full: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+            temporary: 'bg-orange-500/10 text-orange-300 border-orange-500/30'
         };
 
         function ageFrom(dob) {
@@ -668,6 +677,7 @@
                 </div>`;
             const txt = v => v ? esc(v) : '<span class="text-slate-600">—</span>';
             const status = m.membership_status || 'pending';
+            const type = m.membership_type || 'full';
             return `
                 <div class="card space-y-5">
                     <div class="flex flex-col md:flex-row gap-5 md:items-center">
@@ -678,6 +688,7 @@
                             <div class="flex items-center gap-3 flex-wrap">
                                 <h3 class="text-lg font-black uppercase italic text-white">${esc(m.full_name || 'Unnamed Pilot')}</h3>
                                 <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${STATUS_STYLE[status] || STATUS_STYLE.pending}">${esc(status)}</span>
+                                ${status === 'pending' ? '' : `<span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${TYPE_STYLE[type] || ''}">${esc(TYPE_LABEL[type] || type)}</span>`}
                                 ${m.blood_type ? `<span class="px-2.5 py-0.5 rounded-full text-[9px] font-black border bg-red-500/10 text-red-300 border-red-500/30">🩸 ${esc(m.blood_type)}</span>` : ''}
                             </div>
                             <p class="text-[11px] text-slate-400 font-mono mt-1">${esc(m.email)} • ${esc(m.phone_number || 'no phone')}</p>
@@ -721,6 +732,48 @@
                 return;
             }
             const { error } = await client.rpc('review_membership', { target_member_id: id, new_status: status, note });
+            if (error) alert(error.message); else loadData();
+        };
+
+        // Super users must stay Full Members, so they get no "Make Temporary" button (the server enforces it too).
+        function membershipTypeButton(m) {
+            const isSuper = appData.users.some(u => u.user_id === m.id && u.is_super);
+            if (m.membership_type === 'temporary') {
+                return `<button onclick="setMembershipType('${esc(m.id)}', 'full')" class="text-[10px] font-black uppercase text-blue-400 border border-blue-500/30 px-5 py-2.5 rounded-xl hover:bg-blue-600 hover:text-white transition">Make Full</button>`;
+            }
+            return isSuper ? '' : `<button onclick="setMembershipType('${esc(m.id)}', 'temporary')" class="text-[10px] font-black uppercase text-orange-400 border border-orange-500/30 px-5 py-2.5 rounded-xl hover:bg-orange-600 hover:text-white transition">Make Temporary</button>`;
+        }
+
+        // Approval step: the reviewer must pick the membership type. Defaults to Temporary.
+        function membershipTypePicker(m) {
+            const option = (value, checked) => `
+                <label class="flex items-center gap-2 cursor-pointer text-[10px] font-black uppercase text-slate-300">
+                    <input type="radio" name="type-${esc(m.id)}" value="${value}" class="w-4 h-4 accent-blue-600" ${checked ? 'checked' : ''}>
+                    ${TYPE_LABEL[value]}
+                </label>`;
+            return `
+                <fieldset class="flex flex-wrap items-center gap-4 border border-slate-700 rounded-xl px-4 py-2">
+                    <legend class="sr-only">Membership type</legend>
+                    ${option('temporary', true)}
+                    ${option('full', false)}
+                </fieldset>`;
+        }
+
+        window.approveMember = async function(id) {
+            const m = appData.members.find(x => x.id === id);
+            const name = m?.full_name || m?.email || 'this pilot';
+            const type = document.querySelector(`input[name="type-${CSS.escape(id)}"]:checked`)?.value;
+            if (!type) return alert('Choose a membership type first.');
+            if (!confirm(`Approve ${name} as a ${TYPE_LABEL[type]}?`)) return;
+            const { error } = await client.rpc('approve_membership', { target_member_id: id, new_type: type });
+            if (error) alert(error.message); else loadData();
+        };
+
+        window.setMembershipType = async function(id, type) {
+            const m = appData.members.find(x => x.id === id);
+            const name = m?.full_name || m?.email || 'this pilot';
+            if (!confirm(`Change ${name} to a ${TYPE_LABEL[type]}?`)) return;
+            const { error } = await client.rpc('set_membership_type', { target_member_id: id, new_type: type });
             if (error) alert(error.message); else loadData();
         };
 
@@ -1104,7 +1157,12 @@
                 if (r.action === 'delete') return { title: 'Member record deleted', tone: 'red' };
                 if ((r.changed_fields || []).includes('membership_status')) {
                     const to = r.new_data?.membership_status;
-                    return { title: `Membership ${r.old_data?.membership_status || '∅'} → ${to}`, tone: to === 'active' ? 'green' : 'red' };
+                    const asType = (r.changed_fields || []).includes('membership_type') ? ` as ${TYPE_LABEL[r.new_data?.membership_type] || r.new_data?.membership_type}` : '';
+                    return { title: `Membership ${r.old_data?.membership_status || '∅'} → ${to}${asType}`, tone: to === 'active' ? 'green' : 'red' };
+                }
+                if ((r.changed_fields || []).includes('membership_type')) {
+                    const label = t => TYPE_LABEL[t] || t || '∅';
+                    return { title: `${label(r.old_data?.membership_type)} → ${label(r.new_data?.membership_type)}`, tone: 'blue' };
                 }
                 return { title: 'Member profile updated', tone: 'slate' };
             }
