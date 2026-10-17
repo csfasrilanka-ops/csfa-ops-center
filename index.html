@@ -129,6 +129,14 @@
                 <span id="app-indicator" class="hidden min-w-5 h-5 px-1.5 rounded-full bg-yellow-400 text-slate-950 text-[10px] flex items-center justify-center">0</span>
             </button>
             <button onclick="switchTab('members')" id="t-members" class="pb-4 whitespace-nowrap">Members</button>
+            <button onclick="switchTab('inquiries')" id="t-inquiries" class="pb-4 whitespace-nowrap flex items-center gap-2">
+                <span>Inquiries</span>
+                <span id="inquiry-indicator" class="hidden min-w-5 h-5 px-1.5 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center">0</span>
+            </button>
+            <button onclick="switchTab('events')" id="t-events" class="pb-4 whitespace-nowrap flex items-center gap-2">
+                <span>Events</span>
+                <span id="event-indicator" class="hidden min-w-5 h-5 px-1.5 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center">0</span>
+            </button>
             <button onclick="switchTab('sessions')" id="t-sessions" class="pb-4 whitespace-nowrap">Flight Sessions</button>
             <button onclick="switchTab('passes')" id="t-passes" class="pb-4 whitespace-nowrap flex items-center gap-2">
                 <span>Site Passes & Pricing</span>
@@ -165,11 +173,13 @@
         const SB_KEY = "sb_publishable_KHW9RkQqLeB1YMSrSSHowg_tOe_KjdT"; 
         const client = window.supabase.createClient(SB_URL, SB_KEY);
 
-        let appData = { sessions: [], locations: [], addons: [], config: [], passes: [], passTiers: [], users: [], members: [], photos: {} };
+        let appData = { sessions: [], locations: [], addons: [], config: [], passes: [], passTiers: [], users: [], members: [], photos: {}, inquiries: [], events: [], registrations: [] };
         let memberSearch = '';
         let currentTab = 'applications';
         let audit = { rows: [], done: false, loading: false, filters: { category: '', search: '', from: '', to: '' } };
         let gallery = { albums: [], photos: [], open: null, loaded: false, progress: '' };
+        let inquiryFilter = 'open';
+        let eventsView = { open: null, status: '', search: '' };
 
         // --- AUTH ---
         window.signIn = async function() {
@@ -209,7 +219,7 @@
         }
 
         async function loadData() {
-            const [s, l, a, c, p, pt, u, m] = await Promise.all([
+            const [s, l, a, c, p, pt, u, m, iq, ev, er] = await Promise.all([
                 client.from('booking_sessions').select('*').order('id', { ascending: false }),
                 client.from('booking_locations').select('*').order('id', { ascending: true }),
                 client.from('booking_addons').select('*').order('id', { ascending: true }),
@@ -217,7 +227,10 @@
                 client.from('site_pass_requests').select('*').order('created_at', { ascending: false }),
                 client.from('site_pass_tiers').select('*').order('duration_days', { ascending: true }),
                 client.rpc('admin_list_users'),
-                client.from('members').select('*').order('applied_at', { ascending: false })
+                client.from('members').select('*').order('applied_at', { ascending: false }),
+                client.from('contact_inquiries').select('*').order('created_at', { ascending: false }),
+                client.from('events').select('*').order('starts_at', { ascending: false, nullsFirst: false }),
+                client.from('event_registrations').select('*').order('created_at', { ascending: false })
             ]);
 
             // Member photos live in a private bucket: fetch short-lived signed URLs.
@@ -238,7 +251,10 @@
                 passTiers: pt.data || [],
                 users: u.data || [],
                 members,
-                photos
+                photos,
+                inquiries: iq.data || [],
+                events: ev.data || [],
+                registrations: er.data || []
             };
 
             updateNotifications();
@@ -248,7 +264,9 @@
         function updateNotifications() {
             const pending = appData.passes.filter(p => p.status === 'pending_verification');
             const applications = appData.members.filter(m => m.membership_status === 'pending');
-            const total = pending.length + applications.length;
+            const newInquiries = appData.inquiries.filter(i => i.status === 'new');
+            const newSignups = appData.registrations.filter(r => r.status === 'pending');
+            const total = pending.length + applications.length + newInquiries.length + newSignups.length;
             const badge = document.getElementById('notice-badge');
             const count = document.getElementById('notice-count');
             const list = document.getElementById('notice-list');
@@ -258,6 +276,8 @@
             appIndicator.innerText = applications.length;
             appIndicator.classList.toggle('hidden', applications.length === 0);
             indicator.classList.toggle('hidden', pending.length === 0);
+            setIndicator('inquiry-indicator', newInquiries.length);
+            setIndicator('event-indicator', newSignups.length);
 
             if (total > 0) {
                 badge.innerText = total;
@@ -280,11 +300,27 @@
                         </div>
                         <p class="text-[10px] text-slate-400 mt-0.5">${esc(item.site_name)} • ${esc(item.duration_days)} Day(s)</p>
                     </div>
+                `).join('') + newInquiries.map(item => `
+                    <div onclick="switchTab('inquiries')" class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-blue-500 cursor-pointer">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-white uppercase text-[11px]">${esc(item.name)}</span>
+                            <span class="text-[9px] text-blue-400 font-mono">INQUIRY</span>
+                        </div>
+                        <p class="text-[10px] text-slate-400 mt-0.5 truncate">${esc(item.inquiry_type)} • ${esc(item.message)}</p>
+                    </div>
+                `).join('') + newSignups.map(item => `
+                    <div onclick="openEvent('${esc(item.event_id)}')" class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-blue-500 cursor-pointer">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-white uppercase text-[11px]">${esc(item.full_name)}</span>
+                            <span class="text-[9px] text-blue-400 font-mono">EVENT</span>
+                        </div>
+                        <p class="text-[10px] text-slate-400 mt-0.5">${esc(appData.events.find(e => e.id === item.event_id)?.name || 'Event')} • ${esc(FLIGHT_TYPE_LABEL[item.flight_type] || item.flight_type)}</p>
+                    </div>
                 `).join('');
             } else {
                 badge.classList.add('hidden');
                 count.innerText = `All Clear`;
-                list.innerHTML = `<p class="text-slate-500 italic py-2 text-center text-xs">No pending membership or pass requests.</p>`;
+                list.innerHTML = `<p class="text-slate-500 italic py-2 text-center text-xs">Nothing waiting for review.</p>`;
             }
         }
 
@@ -546,6 +582,12 @@
                     </div>
                 `;
             }
+
+            // 11. CONTACT INQUIRIES
+            if(tab === 'inquiries') area.innerHTML = inquiriesView();
+
+            // 12. EVENTS + SIGN-UPS
+            if(tab === 'events') area.innerHTML = eventsView.open ? eventDetailView(eventsView.open) : eventsListView();
 
             // 10. GALLERY
             if(tab === 'gallery') {
@@ -1131,6 +1173,7 @@
             members: 'Members', super_users: 'Super Users', site_pass_requests: 'Pass Requests', site_pass_tiers: 'Pass Packages',
             booking_sessions: 'Flight Sessions', booking_locations: 'Flying Sites', booking_addons: 'Add-ons', booking_config: 'Settings',
             member_flights: 'Flight Logs', gallery_albums: 'Gallery Albums', gallery_photos: 'Gallery Photos',
+            contact_inquiries: 'Inquiries', events: 'Events', event_registrations: 'Event Sign-ups',
             command_center: 'Command Center', auth: 'Logins & Accounts'
         };
         const AUTH_ACTIONS = {
@@ -1141,7 +1184,8 @@
         const SINGULAR = {
             site_pass_requests: 'pass request', site_pass_tiers: 'pass package', booking_sessions: 'flight session',
             booking_locations: 'flying site', booking_addons: 'add-on', booking_config: 'setting', member_flights: 'flight log',
-            gallery_albums: 'gallery album', gallery_photos: 'gallery photo'
+            gallery_albums: 'gallery album', gallery_photos: 'gallery photo',
+            contact_inquiries: 'inquiry', events: 'event', event_registrations: 'event sign-up'
         };
         const short = v => { const t = typeof v === 'string' ? v : JSON.stringify(v); return t == null ? '∅' : (t.length > 60 ? t.slice(0, 57) + '…' : t); };
 
@@ -1262,6 +1306,257 @@
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = `csfa-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        };
+
+        // --- INQUIRIES & EVENTS ---
+        const INQUIRY_STATUS = {
+            new: { label: 'New', style: 'bg-blue-500/10 text-blue-300 border-blue-500/30' },
+            in_progress: { label: 'In Progress', style: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30' },
+            resolved: { label: 'Resolved', style: 'bg-green-500/10 text-green-300 border-green-500/30' },
+            archived: { label: 'Archived', style: 'bg-slate-800 text-slate-400 border-slate-700' }
+        };
+        const SIGNUP_STATUS = {
+            pending: { label: 'Pending', style: 'bg-blue-500/10 text-blue-300 border-blue-500/30' },
+            contacted: { label: 'Contacted', style: 'bg-yellow-500/10 text-yellow-300 border-yellow-500/30' },
+            confirmed: { label: 'Confirmed', style: 'bg-green-500/10 text-green-300 border-green-500/30' },
+            cancelled: { label: 'Cancelled', style: 'bg-slate-800 text-slate-400 border-slate-700' }
+        };
+        const FLIGHT_TYPE_LABEL = {
+            'tandem-passenger': 'Tandem Passenger', 'solo-pilot': 'Licensed Solo Pilot',
+            'media-creator': 'Media / Creator', 'group-booking': 'Group Booking'
+        };
+
+        function setIndicator(id, n) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.innerText = n;
+            el.classList.toggle('hidden', n === 0);
+        }
+
+        const statusPill = (map, s) => `<span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${map[s]?.style || ''}">${esc(map[s]?.label || s)}</span>`;
+        const statusOptions = (map, current) => Object.entries(map).map(([k, v]) => `<option value="${k}" ${k === current ? 'selected' : ''}>${v.label}</option>`).join('');
+        const when = d => d ? new Date(d).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+        const waLink = phone => { const digits = String(phone || '').replace(/\D/g, ''); return digits ? `https://wa.me/${digits}` : ''; };
+        const contactLinks = (email, phone, subject) => `
+            <a href="mailto:${esc(email)}?subject=${encodeURIComponent(subject)}" class="text-blue-400 hover:text-white">✉️ ${esc(email)}</a>
+            ${phone ? `<a href="${waLink(phone)}" target="_blank" rel="noopener" class="text-green-400 hover:text-white">💬 ${esc(phone)}</a>` : ''}`;
+
+        function inquiriesView() {
+            const filters = { open: 'Open (New + In Progress)', all: 'All', ...Object.fromEntries(Object.entries(INQUIRY_STATUS).map(([k, v]) => [k, v.label])) };
+            const list = appData.inquiries.filter(i => inquiryFilter === 'all' || (inquiryFilter === 'open' ? ['new', 'in_progress'].includes(i.status) : i.status === inquiryFilter));
+            const count = s => appData.inquiries.filter(i => i.status === s).length;
+            return `
+                <div class="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-6">
+                    <div>
+                        <h2 class="text-blue-500 uppercase text-xs italic font-black tracking-widest">Contact Inquiries</h2>
+                        <p class="text-[10px] text-slate-500 mt-1">Messages from the website contact form. ${count('new')} new • ${count('in_progress')} in progress • ${count('resolved')} resolved</p>
+                    </div>
+                    <select class="input md:max-w-xs text-xs" onchange="inquiryFilter = this.value; switchTab('inquiries')">
+                        ${Object.entries(filters).map(([k, v]) => `<option value="${k}" ${k === inquiryFilter ? 'selected' : ''}>${v}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="space-y-4">
+                    ${list.length ? list.map(i => `
+                        <div class="card space-y-4">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div class="flex flex-wrap items-center gap-2 min-w-0">
+                                    <span class="font-bold text-white text-sm">${esc(i.name)}</span>
+                                    ${statusPill(INQUIRY_STATUS, i.status)}
+                                    <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase border border-slate-700 text-slate-300">${esc(i.inquiry_type)}</span>
+                                </div>
+                                <span class="text-[10px] font-mono text-slate-500">${esc(when(i.created_at))}</span>
+                            </div>
+                            <div class="flex flex-wrap gap-x-5 gap-y-1 text-xs font-mono">${contactLinks(i.email, i.phone, 'Re: your CSFA inquiry')}</div>
+                            <p class="text-sm text-slate-200 whitespace-pre-wrap break-words bg-slate-950 border border-slate-800 rounded-xl p-4">${esc(i.message)}</p>
+                            <div class="grid grid-cols-1 md:grid-cols-[12rem_1fr_auto] gap-3 items-end pt-2 border-t border-white/5">
+                                <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Status</label><select id="inq-status-${i.id}" class="input text-xs uppercase font-black">${statusOptions(INQUIRY_STATUS, i.status)}</select></div>
+                                <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Internal Note</label><input id="inq-note-${i.id}" class="input text-xs" value="${esc(i.admin_note)}" placeholder="Who's handling it, what was replied…"></div>
+                                <div class="flex gap-2">
+                                    <button onclick="saveInquiry('${esc(i.id)}')" class="btn-save flex-1">SAVE</button>
+                                    <button onclick="deleteRow('contact_inquiries', '${esc(i.id)}')" class="btn-delete" aria-label="Delete inquiry">✕</button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs">No inquiries here.</p>'}
+                </div>
+            `;
+        }
+
+        window.saveInquiry = async function(id) {
+            const { error } = await client.from('contact_inquiries').update({
+                status: document.getElementById(`inq-status-${id}`).value,
+                admin_note: document.getElementById(`inq-note-${id}`).value.trim() || null
+            }).eq('id', id);
+            if (error) alert(error.message); else loadData();
+        };
+
+        const eventDates = e => [e.starts_at, e.ends_at].filter(Boolean).map(d => new Date(d).toLocaleDateString([], { dateStyle: 'medium' })).join(' – ');
+
+        function eventsListView() {
+            return `
+                <div class="card border-blue-500/30 mb-10 space-y-4">
+                    <div>
+                        <h3 class="text-blue-500 font-black uppercase text-xs tracking-widest italic">Create Event</h3>
+                        <p class="text-[10px] text-slate-400 mt-1">The slug links a website sign-up form to this event (e.g. paragliding-festival-2027).</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                        <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Name</label><input id="ev-name" class="input" placeholder="Paragliding Festival 2027"></div>
+                        <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Slug</label><input id="ev-slug" class="input font-mono" placeholder="paragliding-festival-2027"></div>
+                        <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Location</label><input id="ev-location" class="input" placeholder="Kandy"></div>
+                        <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Starts</label><input type="date" id="ev-start" class="input"></div>
+                        <button onclick="createEvent()" class="btn-primary">Add Event</button>
+                    </div>
+                </div>
+                <h2 class="text-blue-500 uppercase text-xs italic font-black tracking-widest mb-4">Events (${appData.events.length})</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    ${appData.events.length ? appData.events.map(e => {
+                        const regs = appData.registrations.filter(r => r.event_id === e.id);
+                        const n = s => regs.filter(r => r.status === s).length;
+                        return `
+                            <button onclick="openEvent('${esc(e.id)}')" class="card text-left space-y-3 w-full cursor-pointer">
+                                <div class="flex justify-between items-start gap-3">
+                                    <div class="min-w-0">
+                                        <p class="font-black text-white uppercase italic text-lg truncate">${esc(e.name)}</p>
+                                        <p class="text-[10px] font-mono text-slate-500">${esc(e.slug)}</p>
+                                    </div>
+                                    <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${e.registration_open ? 'bg-green-500/10 text-green-300 border-green-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'}">${e.registration_open ? 'Sign-ups open' : 'Closed'}</span>
+                                </div>
+                                <p class="text-xs text-slate-400">${esc(e.location || '')}${e.location && eventDates(e) ? ' • ' : ''}${esc(eventDates(e))}</p>
+                                <div class="flex flex-wrap gap-2 text-[10px] font-black uppercase">
+                                    <span class="text-white">${regs.length} on board</span>
+                                    <span class="text-blue-300">${n('pending')} pending</span>
+                                    <span class="text-yellow-300">${n('contacted')} contacted</span>
+                                    <span class="text-green-300">${n('confirmed')} confirmed</span>
+                                </div>
+                            </button>`;
+                    }).join('') : '<p class="text-slate-500 italic py-8 text-center text-xs md:col-span-2">No events yet.</p>'}
+                </div>
+            `;
+        }
+
+        function eventDetailView(id) {
+            const e = appData.events.find(x => x.id === id);
+            if (!e) { eventsView.open = null; return eventsListView(); }
+            const q = eventsView.search.toLowerCase();
+            const all = appData.registrations.filter(r => r.event_id === id);
+            const regs = all
+                .filter(r => !eventsView.status || r.status === eventsView.status)
+                .filter(r => !q || [r.full_name, r.email, r.phone].some(v => (v || '').toLowerCase().includes(q)));
+            const n = s => all.filter(r => r.status === s).length;
+            return `
+                <button onclick="closeEvent()" class="text-[10px] font-black uppercase text-slate-400 hover:text-white mb-6">← All Events</button>
+                <div class="card mb-6 space-y-4">
+                    <div class="flex flex-col md:flex-row justify-between md:items-start gap-4">
+                        <div>
+                            <h2 class="text-2xl font-black text-white uppercase italic">${esc(e.name)}</h2>
+                            <p class="text-[10px] font-mono text-slate-500 mt-1">${esc(e.slug)}</p>
+                            <p class="text-xs text-slate-400 mt-2">${esc(e.location || '')}${e.location && eventDates(e) ? ' • ' : ''}${esc(eventDates(e))}</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="toggleEventSignups('${esc(e.id)}')" class="text-[10px] font-black uppercase px-4 py-2.5 rounded-xl border transition ${e.registration_open ? 'text-yellow-300 border-yellow-500/30 hover:bg-yellow-500 hover:text-slate-950' : 'text-green-300 border-green-500/30 hover:bg-green-600 hover:text-white'}">${e.registration_open ? 'Close Sign-ups' : 'Open Sign-ups'}</button>
+                            <button onclick="exportSignupsCsv('${esc(e.id)}')" class="text-[10px] font-black uppercase text-slate-300 border border-slate-700 px-4 py-2.5 rounded-xl hover:border-blue-500 transition">Export CSV</button>
+                            <button onclick="deleteEvent('${esc(e.id)}')" class="text-[10px] font-black uppercase text-red-400 border border-red-500/30 px-4 py-2.5 rounded-xl hover:bg-red-600 hover:text-white transition">Delete Event</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 text-center">
+                        ${[['On Board', all.length, 'text-white'], ['Pending', n('pending'), 'text-blue-300'], ['Contacted', n('contacted'), 'text-yellow-300'], ['Confirmed', n('confirmed'), 'text-green-300'], ['Cancelled', n('cancelled'), 'text-slate-400']].map(([l, v, c]) => `
+                            <div class="bg-slate-950 border border-slate-800 rounded-2xl p-3">
+                                <p class="text-2xl font-black ${c}">${v}</p>
+                                <p class="text-[9px] font-bold uppercase text-slate-500 tracking-widest">${l}</p>
+                            </div>`).join('')}
+                    </div>
+                </div>
+                <div class="flex flex-col md:flex-row gap-3 mb-4">
+                    <input id="signup-search" class="input text-xs md:max-w-xs" placeholder="Search name, email, phone…" value="${esc(eventsView.search)}"
+                        oninput="eventsView.search = this.value; switchTab('events'); const el = document.getElementById('signup-search'); el.focus(); el.setSelectionRange(el.value.length, el.value.length);">
+                    <select class="input text-xs md:max-w-[14rem]" onchange="eventsView.status = this.value; switchTab('events')">
+                        <option value="">All statuses</option>${statusOptions(SIGNUP_STATUS, eventsView.status)}
+                    </select>
+                </div>
+                <div class="space-y-3">
+                    ${regs.length ? regs.map(r => `
+                        <div class="card space-y-3">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="font-bold text-white text-sm">${esc(r.full_name)}</span>
+                                    ${statusPill(SIGNUP_STATUS, r.status)}
+                                    <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase border border-slate-700 text-slate-300">${esc(FLIGHT_TYPE_LABEL[r.flight_type] || r.flight_type)}</span>
+                                </div>
+                                <span class="text-[10px] font-mono text-slate-500">${esc(when(r.created_at))}</span>
+                            </div>
+                            <div class="flex flex-wrap gap-x-5 gap-y-1 text-xs font-mono">${contactLinks(r.email, r.phone, `${e.name}: your CSFA sign-up`)}</div>
+                            <div class="grid grid-cols-1 md:grid-cols-[12rem_1fr_auto] gap-3 items-end pt-2 border-t border-white/5">
+                                <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Status</label><select id="reg-status-${r.id}" class="input text-xs uppercase font-black">${statusOptions(SIGNUP_STATUS, r.status)}</select></div>
+                                <div><label class="text-[9px] font-bold text-slate-500 uppercase mb-1 block">Internal Note</label><input id="reg-note-${r.id}" class="input text-xs" value="${esc(r.admin_note)}" placeholder="Slot, payment, follow-up…"></div>
+                                <div class="flex gap-2">
+                                    <button onclick="saveSignup('${esc(r.id)}')" class="btn-save flex-1">SAVE</button>
+                                    <button onclick="deleteRow('event_registrations', '${esc(r.id)}')" class="btn-delete" aria-label="Delete sign-up">✕</button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('') : `<p class="text-slate-500 italic py-8 text-center text-xs">${all.length ? 'No sign-ups match.' : 'No one on board yet.'}</p>`}
+                </div>
+            `;
+        }
+
+        window.openEvent = function(id) { eventsView = { open: id, status: '', search: '' }; switchTab('events'); window.scrollTo(0, 0); };
+        window.closeEvent = function() { eventsView.open = null; switchTab('events'); };
+
+        window.createEvent = async function() {
+            const name = document.getElementById('ev-name').value.trim();
+            const slug = document.getElementById('ev-slug').value.trim().toLowerCase();
+            const start = document.getElementById('ev-start').value;
+            if (!name || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) return alert('Enter a name and a slug of lowercase letters, numbers and dashes (e.g. paragliding-festival-2027).');
+            const { error } = await client.from('events').insert({
+                name, slug,
+                location: document.getElementById('ev-location').value.trim() || null,
+                starts_at: start ? new Date(start).toISOString() : null
+            });
+            if (error) alert(error.message); else loadData();
+        };
+
+        window.toggleEventSignups = async function(id) {
+            const e = appData.events.find(x => x.id === id);
+            const { error } = await client.from('events').update({ registration_open: !e.registration_open }).eq('id', id);
+            if (error) alert(error.message); else loadData();
+        };
+
+        window.deleteEvent = async function(id) {
+            const e = appData.events.find(x => x.id === id);
+            const n = appData.registrations.filter(r => r.event_id === id).length;
+            if (!confirm(`Delete ${e?.name || 'this event'} and its ${n} sign-up(s)? This can't be undone.`)) return;
+            const { error } = await client.from('events').delete().eq('id', id);
+            if (error) return alert(error.message);
+            eventsView.open = null;
+            loadData();
+        };
+
+        window.saveSignup = async function(id) {
+            const { error } = await client.from('event_registrations').update({
+                status: document.getElementById(`reg-status-${id}`).value,
+                admin_note: document.getElementById(`reg-note-${id}`).value.trim() || null
+            }).eq('id', id);
+            if (error) alert(error.message); else loadData();
+        };
+
+        // Cells starting with = + - @ are prefixed so spreadsheets don't run them as formulas.
+        window.exportSignupsCsv = function(id) {
+            const e = appData.events.find(x => x.id === id);
+            const rows = appData.registrations.filter(r => r.event_id === id);
+            if (rows.length === 0) return alert('No sign-ups to export yet.');
+            const cell = v => {
+                let t = v == null ? '' : String(v);
+                if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+                return `"${t.replace(/"/g, '""')}"`;
+            };
+            const header = ['Signed Up', 'Name', 'Email', 'Phone', 'Flying As', 'Status', 'Note'];
+            const lines = rows.map(r => [new Date(r.created_at).toISOString(), r.full_name, r.email, r.phone, FLIGHT_TYPE_LABEL[r.flight_type] || r.flight_type, SIGNUP_STATUS[r.status]?.label || r.status, r.admin_note].map(cell).join(','));
+            const blob = new Blob([[header.map(cell).join(','), ...lines].join('\r\n')], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `${e?.slug || 'event'}-signups-${new Date().toISOString().slice(0, 10)}.csv`;
             a.click();
             URL.revokeObjectURL(a.href);
         };
