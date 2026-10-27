@@ -563,7 +563,7 @@
                 const q = memberSearch.toLowerCase();
                 const members = appData.members
                     .filter(m => m.membership_status !== 'pending')
-                    .filter(m => !q || [m.full_name, m.email, m.pilot_rating, m.country, m.appi_license_no].some(v => (v || '').toLowerCase().includes(q)));
+                    .filter(m => !q || [m.full_name, m.email, m.member_id, m.pilot_rating, m.country, m.appi_license_no].some(v => (v || '').toLowerCase().includes(q)));
                 const counts = s => appData.members.filter(m => m.membership_status === s).length;
                 const typeCount = t => appData.members.filter(m => m.membership_status !== 'pending' && m.membership_type === t).length;
                 area.innerHTML = `
@@ -572,7 +572,7 @@
                             <h2 class="text-blue-500 uppercase text-xs italic font-black tracking-widest">Club Members</h2>
                             <p class="text-[10px] text-slate-500 mt-1">${counts('active')} active • ${counts('suspended')} suspended • ${counts('rejected')} rejected • ${typeCount('full')} full • ${typeCount('temporary')} temporary</p>
                         </div>
-                        <input id="member-search" oninput="memberSearch = this.value; switchTab('members'); const el = document.getElementById('member-search'); el.focus(); el.setSelectionRange(el.value.length, el.value.length);" value="${esc(memberSearch)}" placeholder="Search name, email, rating, licence…" class="input md:max-w-xs">
+                        <input id="member-search" oninput="memberSearch = this.value; switchTab('members'); const el = document.getElementById('member-search'); el.focus(); el.setSelectionRange(el.value.length, el.value.length);" value="${esc(memberSearch)}" placeholder="Search name, email, member ID, rating, licence…" class="input md:max-w-xs">
                     </div>
                     <div class="space-y-4">
                         ${members.length > 0 ? members.map(m => memberCard(m, membershipTypeButton(m) + (m.membership_status === 'active'
@@ -731,6 +731,7 @@
                                 <h3 class="text-lg font-black uppercase italic text-white">${esc(m.full_name || 'Unnamed Pilot')}</h3>
                                 <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${STATUS_STYLE[status] || STATUS_STYLE.pending}">${esc(status)}</span>
                                 ${status === 'pending' ? '' : `<span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${TYPE_STYLE[type] || ''}">${esc(TYPE_LABEL[type] || type)}</span>`}
+                                ${m.member_id ? `<span class="px-2.5 py-0.5 rounded-full text-[9px] font-black font-mono border bg-blue-500/10 text-blue-300 border-blue-500/30 ${type === 'full' ? '' : 'opacity-50'}" title="${type === 'full' ? 'Membership ID' : 'Membership ID (kept while not a Full Member)'}">${esc(m.member_id)}</span>` : ''}
                                 ${m.blood_type ? `<span class="px-2.5 py-0.5 rounded-full text-[9px] font-black border bg-red-500/10 text-red-300 border-red-500/30">🩸 ${esc(m.blood_type)}</span>` : ''}
                             </div>
                             <p class="text-[11px] text-slate-400 font-mono mt-1">${esc(m.email)} • ${esc(m.phone_number || 'no phone')}</p>
